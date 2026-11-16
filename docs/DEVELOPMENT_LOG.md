@@ -1,30 +1,30 @@
 # Development Log
 
 A step-by-step record of how Smart Model Router was built: what was done, how, why, and how
-each part was tested. The last section is a template for logging your own experiment runs.
+each part was tested. The last section is the log for real-model experiment runs.
 
 ---
 
-## Phase 0: Starting point
+## Phase 0: Plan
 
-**Input:** a project guide (`smart-model-router-guide.md`) describing the problem, the three-tier
-design, the tech stack, reference code for each file, and 16 sample questions.
+**Starting point:** a project plan describing the problem, the three-tier design (retrieval,
+small model, large model), the tech stack, a first version of each module, and 16 sample questions.
 
-**Requirements agreed before building:**
+**Design decisions made before building:**
 
 | Decision | Choice | Reason |
 |---|---|---|
 | Models | **Free only** | No paid APIs. Gemini is used on the free tier (no billing), and Ollama is local |
 | Large model | Support **both** Gemini free tier and a **local Ollama** model | Gemini needs no big machine; local needs no key or internet |
-| Fixes to the guide's code | Apply small correctness and speed fixes | Keep the guide's structure but fix issues found in review |
-| Dataset | Write about 300 starter questions | The guide says at least 300 are needed for meaningful results |
+| Fixes to the first version | Apply small correctness and speed fixes | Keep the planned structure but fix issues found in review |
+| Dataset | Write about 300 starter questions | At least 300 are needed for meaningful results |
 | Kanglish questions | Separate file | Keep training English-only and test code-mixed questions separately |
 | Literature survey | Written for the project | Covers routing, cascades, judges, retrieval and code-mixed NLP |
 | Demo mode | Add one | Lets anyone visiting the public repo run the project without installing models |
 
 ---
 
-## Phase 1: Core project from the guide
+## Phase 1: Core project
 
 ### 1.1 Configuration (`config.py`)
 
@@ -42,7 +42,7 @@ design, the tech stack, reference code for each file, and 16 sample questions.
     `usage_metadata`, and **thinking tokens are added to output tokens** because they are billed as output.
   - `ask_small_with_confidence()` appends a `CONFIDENCE: N` instruction and parses the result.
   - `judge()` asks the large model for YES/NO against a reference.
-- **Fixes over the guide:**
+- **Fixes over the plan:**
   - Gemini **rate-limit handling**: free-tier 429/503 errors are retried with growing waits
     (30 s, 60 s, …) instead of skipping the question. The default pause between calls was raised
     from 1 s to 6 s to stay under per-minute limits.
@@ -59,9 +59,9 @@ design, the tech stack, reference code for each file, and 16 sample questions.
 
 ### 1.4 Routers (`router.py`)
 
-- **How:** `rule_score()` exactly as in the guide. `features()` = 384-dim embedding + rule score
+- **How:** `rule_score()` as originally designed. `features()` = 384-dim embedding + rule score
   + normalised length. `LearnedRouter` loads the saved logistic-regression model.
-- **Fix:** added `p_hard_many()` for **batched** prediction. The guide embedded test questions one
+- **Fix:** added `p_hard_many()` for **batched** prediction. The first version embedded test questions one
   at a time, which is slow with a real embedding model; batching embeds them all in one call.
 
 ### 1.5 Labelling (`build_labels.py`)
@@ -69,7 +69,7 @@ design, the tech stack, reference code for each file, and 16 sample questions.
 - **How:** for each question, get the small answer and confidence, get the large answer, then judge
   both. Writes one row per question.
 - **Fixes:**
-  - The **checkpoint counter** counts only newly labelled rows. In the guide it counted all rows,
+  - The **checkpoint counter** counts only newly labelled rows. Originally it counted all rows,
     so after resuming, checkpoints happened at the wrong times.
   - **Saves on Ctrl+C** (a `try/finally` block), so a manual stop loses nothing.
   - Added a `has_reference` column so analysis can separate human-referenced labels.
@@ -88,7 +88,7 @@ design, the tech stack, reference code for each file, and 16 sample questions.
 - **How:** replays strategies on the saved test split with no model calls, as described in
   [ROUTER_DESIGN.md §5](ROUTER_DESIGN.md#5-evaluation-method).
 - **Fixes:**
-  - **Oracle definition.** The guide's oracle sent every question the small model got wrong to the
+  - **Oracle definition.** The first version's oracle sent every question the small model got wrong to the
     large model, even when the large model was also wrong. That costs money and gains no accuracy,
     so it isn't the "perfect router". It is now `small_ok == 0 AND large_ok == 1`.
   - Batched router predictions (see 1.4).
@@ -106,8 +106,8 @@ design, the tech stack, reference code for each file, and 16 sample questions.
 
 ### 1.9 Data
 
-- `data/faq.csv`: the 6 sample FAQs from the guide (to be replaced with real department FAQs).
-- `data/queries.csv`: the guide's 16 examples plus hand-written questions, for **327 English
+- `data/faq.csv`: 6 sample FAQs (to be replaced with real department FAQs).
+- `data/queries.csv`: the 16 sample questions plus hand-written questions, for **327 English
   questions** in total across C, data structures, algorithms, DBMS, OS, computer networks, OOP and
   maths. Easy ones are definitions ("What is a semaphore?"). Hard ones include code debugging,
   output tracing, proofs, numericals and design problems.
@@ -117,8 +117,8 @@ design, the tech stack, reference code for each file, and 16 sample questions.
 
 ### 1.10 Testing in Phase 1
 
-The development environment had no Ollama, no Gemini key, and **no access to Hugging Face** (so the
-embedding model could not be downloaded). Testing therefore used fakes:
+Phase 1 was tested without Ollama, a Gemini key or the Hugging Face download (the embedding
+model), so that the code could be checked on any machine. Testing used fakes:
 
 - a fake Ollama response and a fake Gemini client, including one forced **429 error** to test the
   retry,
@@ -349,12 +349,12 @@ The project was cloned fresh from GitHub into a clean folder, installed from
 | Chat app | `streamlit run app.py -- --demo` | http://localhost:8501 |
 | Live console + architecture | `python -m http.server 8000 --directory docs` | http://localhost:8000/ and /architecture.html |
 
-Each one was driven in headless Chromium over HTTP (not `file://`). Real Ollama and Gemini could
-not be reached from the build machine, so the real-model run is the next step (Phase 6).
+Each one was driven in headless Chromium over HTTP (not `file://`). The real-model run with
+Ollama and Gemini is the next step (Phase 6).
 
 ---
 
-## Phase 6: Real experiment run log (fill this in)
+## Phase 6: Real experiment run log
 
 Copy this block for each real run so the report can cite exact settings.
 

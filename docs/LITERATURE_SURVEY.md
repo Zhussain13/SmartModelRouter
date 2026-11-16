@@ -2,9 +2,7 @@
 
 **Project:** Smart Model Router: cost-aware routing between retrieval, a small local LLM and a large LLM
 
-> **Before you submit:** check every reference against its arXiv or publisher page (authors,
-> year, venue). The arXiv links below make that quick. Add any papers your guide or department
-> requires.
+> Each reference links to its arXiv or publisher page.
 
 ---
 

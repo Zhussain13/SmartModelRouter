@@ -47,7 +47,7 @@ nothing to install. See [Live web console](#live-web-console) for how to put it 
 
 | Option | Quality | Cost | Speed |
 |---|---|---|---|
-| **Large model** (Gemini, GPT, Claude, Qwen 14B) | Excellent | Paid APIs charge per token; local runs need a big machine | Slower |
+| **Large model** (Gemini, GPT, Llama 70B, Qwen 14B) | Excellent | Paid APIs charge per token; local runs need a big machine | Slower |
 | **Small local model** (Qwen 2.5 3B, Llama 3.2 3B) | Good on easy questions, weak on hard ones | Free, runs on a laptop | Fast |
 
 Most student questions are easy ("What is a pointer?"), and a free 3B model answers them just as
@@ -289,7 +289,7 @@ question is ever scored by a model that trained on it. The badge on the page swi
 ### Demo run (simulated data)
 
 These numbers come from `python run_pipeline.py --demo`. **They are simulated** and only show what
-the output looks like. Replace them with your real run for any report.
+the output looks like. Real results come from a run with real models.
 
 <p align="center">
   <img src="docs/images/demo_results.png" width="75%" alt="Cost vs accuracy graph from the demo run">
@@ -318,7 +318,7 @@ gap between a router's curve and the oracle star is the room left for improvemen
 ### Your real results
 
 Run the full pipeline. `outputs/real/results.csv` and `outputs/real/results.png` are the table
-and graph for your report.
+and graph of the real experiment.
 
 > "Cost" is **API-equivalent**: what the same traffic would cost on a paid API (Gemini 2.5 Flash
 > list price by default). You pay nothing to run this project. The cost column lets the strategies
@@ -415,7 +415,7 @@ pytest -q
 2. **Better router model:** fine-tune DistilBERT instead of logistic regression.
 3. **Middle tier:** small → medium (e.g. `qwen2.5:7b`) → large.
 4. **Semantic cache:** reuse answers to questions that were already asked.
-5. **Real student questions:** collect them with a Google Form. This is what makes the dataset original.
+5. **Real student questions:** collect questions from students (for example with a Google Form) to replace the starter set.
 
 ## References
 
