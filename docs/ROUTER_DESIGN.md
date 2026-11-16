@@ -57,7 +57,9 @@ flowchart LR
 **Choosing the threshold.** If it is too low, questions get wrong FAQ answers (for example, "When
 is IA-3?" matching "When is IA-2?"). If it is too high, paraphrases miss the FAQ and cost an LLM
 call. 0.75 is a conservative starting point for MiniLM; tune it on real paraphrases. Demo mode uses
-a hashing embedder that is cruder, so its threshold is 0.55.
+a cruder hashing embedder with filler words ("what", "is", "the", …) removed for FAQ lookup. Its
+threshold of 0.47 was tuned so that all 14 FAQ phrasings match while none of the 337 course
+questions do (highest 0.45).
 
 ---
 
