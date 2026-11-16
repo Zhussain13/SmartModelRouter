@@ -2,7 +2,12 @@
 
 Every answer was already generated and graded in step 1, so this step makes
 NO API calls. It replays each strategy on the held-out test set.
+
+Evaluate on another labelled file (e.g. the Kanglish set):
+    python evaluate.py --test data/labels_kanglish.csv --out results_kanglish
 """
+import argparse
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -11,7 +16,14 @@ import pandas as pd
 
 from router import LearnedRouter, RuleRouter
 
-df = pd.read_csv("data/test_split.csv")
+ap = argparse.ArgumentParser()
+ap.add_argument("--test", default="data/test_split.csv",
+                help="labelled questions to evaluate on")
+ap.add_argument("--out", default="results",
+                help="output name: writes <out>.csv and <out>.png")
+args = ap.parse_args()
+
+df = pd.read_csv(args.test)
 N = len(df)
 print(f"Evaluating on {N} held-out questions\n")
 
@@ -52,7 +64,7 @@ for c in [5, 7, 9]:
 res = pd.DataFrame(rows)
 pd.set_option("display.width", 120)
 print(res.round(4).to_string(index=False))
-res.to_csv("results.csv", index=False)
+res.to_csv(f"{args.out}.csv", index=False)
 
 # ---------- Cost vs accuracy curve ----------
 plt.figure(figsize=(8, 5))
@@ -74,8 +86,8 @@ plt.title("Cost vs accuracy of routing strategies")
 plt.grid(alpha=0.3)
 plt.legend()
 plt.tight_layout()
-plt.savefig("results.png", dpi=150)
-print("\nSaved results.csv and results.png")
+plt.savefig(f"{args.out}.png", dpi=150)
+print(f"\nSaved {args.out}.csv and {args.out}.png")
 
 # ---------- Headline number ----------
 large_acc = res[res.strategy == "always large"].accuracy.iloc[0]

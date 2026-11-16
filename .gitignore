@@ -20,3 +20,6 @@ results.png
 .idea/
 .DS_Store
 Thumbs.db
+data/labels_*.csv
+results_*.csv
+results_*.png
