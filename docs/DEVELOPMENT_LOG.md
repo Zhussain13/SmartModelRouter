@@ -234,7 +234,61 @@ only prove that the pipeline works end to end.
 
 ---
 
-## Phase 4: Real experiment run log (fill this in)
+## Phase 4: Live web console
+
+**Goal:** one page that demonstrates the whole project: questions streaming through the router
+live, where each goes, and how much the router saves compared with no router.
+
+### 4.1 Data export (`export_web_data.py`)
+
+- Reads `labels.csv` (demo or real) and scores every question with the **rule router** and the
+  **learned router**.
+- The learned-router scores use **5-fold cross-validation** (`cross_val_predict`): each question
+  is scored by a model trained on the other folds. Training once on everything and scoring the same
+  questions would overstate how good the router is.
+- Runs the real retriever over the FAQ questions plus 14 common phrasings ("IA 2 exam date?") and
+  keeps those that pass the retrieval threshold. That becomes the FAQ-type traffic.
+- Tags each question with a topic (C, DS & Algo, DBMS, OS, CN, OOP, Maths) using keywords, for the feed.
+- Writes compact JSON between two markers inside `docs/index.html`, so the page stays a **single
+  file** that works when double-clicked, on GitHub Pages, or as a shared link.
+
+### 4.2 The page (`docs/index.html`)
+
+- **Plain HTML, CSS and JavaScript, with no libraries.** Charts and the switchboard animation are
+  drawn on `<canvas>`.
+- **Traffic stream:** a seeded random generator builds N questions. Each one is FAQ-type with the
+  chosen probability; otherwise the next question comes from a shuffled pass over all labelled
+  questions, so repeats are spread evenly. The same settings always give the same stream.
+- **Routing in the browser** reuses the exact rules from `evaluate.py`: learned/rules `p ≥ t` → large;
+  cascade `confidence < c` → large, paying for the small attempt too; FAQ → $0.
+- **"Without router"** means every question, FAQ-type ones included, goes to the large model. FAQ
+  questions are priced at the average large-model cost.
+- **Live instruments:** saved % and $, with-router vs without-router cost meters, projection to
+  1,000,000 questions, accuracy (with router vs always large vs always small), route split, average
+  wait, a cumulative cost race chart, a live feed and a same-traffic comparison table.
+- **Controls:** 500 / 1,000 / 1,500 questions, router type, threshold, FAQ share, speed
+  (1×, 4×, 16×, Max), pause, and restart with a new random stream.
+- **Design:** a signal-routing console look (IBM Plex type, amber/teal/indigo route colours), with
+  light and dark themes, a phone layout, and support for reduced motion (numbers update without the
+  animation).
+
+### 4.3 Testing
+
+- Rendered in headless Chromium at desktop (light and dark) and at 400 px phone width: no console
+  errors and no horizontal overflow.
+- Functional run: 1,500 questions, cascade router, Max speed. It completed, and the comparison
+  table matched expectations (oracle cheapest at 100% accuracy, rules cheapest but least accurate).
+- **Fixes from that review:**
+  - The FAQ outlet count overlapped its label.
+  - The last x-axis label was clipped.
+  - The comparison table's "always large" row still sent FAQ traffic to retrieval. A separate
+    "No router · all → large" row was added, and "Saved" is now always measured against it.
+- New test `tests/test_web_export.py` runs the demo pipeline and the export in a temp copy and
+  checks that the embedded JSON is valid and complete (13 tests in total).
+
+---
+
+## Phase 5: Real experiment run log (fill this in)
 
 Copy this block for each real run so the report can cite exact settings.
 

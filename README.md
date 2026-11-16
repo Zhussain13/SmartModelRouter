@@ -16,8 +16,13 @@ and the large model is either Google Gemini on its **free tier** or a **bigger l
 is also a **demo mode** that runs the whole project with no models, keys or downloads.
 
 <p align="center">
-  <img src="docs/images/demo_app.png" width="85%" alt="Chat app showing the retrieval, small and large routes">
+  <img src="docs/images/console.png" width="90%" alt="Live routing console streaming 1,000 questions through the router">
 </p>
+
+**▶ Live console:** [`docs/index.html`](docs/index.html) streams 500–1,500 questions through the
+router and shows live where each one goes, how accurate the answers are, and how much money is
+saved compared with sending everything to the large model. Open it in any browser; there's
+nothing to install. See [Live web console](#live-web-console) for how to put it online.
 
 ---
 
@@ -28,6 +33,7 @@ is also a **demo mode** that runs the whole project with no models, keys or down
 - [Quick start (demo mode, 2 minutes)](#quick-start-demo-mode-2-minutes)
 - [Full setup with real free models](#full-setup-with-real-free-models)
 - [Running the pipeline](#running-the-pipeline)
+- [Live web console](#live-web-console)
 - [Results](#results)
 - [Project structure](#project-structure)
 - [Configuration](#configuration)
@@ -194,6 +200,10 @@ anything that fails.
 | 3 | `python evaluate.py` | Compares all strategies on the test split (no model calls). Saves `results.csv` and `results.png` |
 | 4 | `streamlit run app.py` | The chat app, using the trained router (or the rule router if none is trained) |
 
+<p align="center">
+  <img src="docs/images/demo_app.png" width="70%" alt="Streamlit chat app showing the retrieval, small and large routes">
+</p>
+
 Steps 1–3 in one command:
 
 ```bash
@@ -224,6 +234,43 @@ Then evaluate on that file:
 ```bash
 python evaluate.py --test outputs/real/labels_kanglish.csv --out outputs/real/results_kanglish
 ```
+
+---
+
+## Live web console
+
+`docs/index.html` is a single-file web page that demonstrates the whole project.
+
+- **Pick a load:** 500, 1,000 or 1,500 questions, plus the share of FAQ-type traffic.
+- **Pick a router:** learned, rules or cascade, and drag its threshold.
+- **Watch it run:** questions flow through a switchboard to the FAQ, small and large outlets.
+  Counters, the cost race chart (with router vs without router), accuracy bars and a live feed of
+  each routed question update as it goes.
+- **Read the outcome:** money saved (in % and $), the projected saving at 1,000,000 questions a
+  month, and a table comparing every strategy on exactly the same traffic.
+
+<p align="center">
+  <img src="docs/images/console.png" width="80%" alt="Live routing console">
+</p>
+
+**Open it:** double-click `docs/index.html`, or put it online with GitHub Pages: open the repo's
+**Settings → Pages**, set *Source* to **Deploy from a branch**, choose **main** and **/docs**, and
+save. The console then appears at `https://zhussain13.github.io/SmartModelRouter/`.
+
+**Load your own results:** the page ships with the demo data. After a real run, export your
+labels into the page:
+
+```bash
+python run_pipeline.py
+```
+
+```bash
+python export_web_data.py
+```
+
+The export scores every question with the learned router using 5-fold cross-validation, so no
+question is ever scored by a model that trained on it. The badge on the page switches from
+"Simulated data" to "Real run".
 
 ---
 
@@ -280,11 +327,13 @@ SmartModelRouter/
 ├── evaluate.py           # step 3: compare strategies, draw cost-vs-accuracy graph
 ├── run_pipeline.py       # steps 1-3 in one command
 ├── app.py                # step 4: Streamlit chat app
+├── export_web_data.py    # packs labelled results into the live web console
 ├── data/
 │   ├── faq.csv               # FAQ questions + answers (retrieval route)
 │   ├── queries.csv           # 327 English questions (C, DS, algorithms, DBMS, OS, CN, OOP, maths)
 │   └── queries_kanglish.csv  # Kannada/English code-mixed questions (multilingual test)
 ├── docs/
+│   ├── index.html            # live web console (single file, GitHub Pages ready)
 │   ├── LITERATURE_SURVEY.md  # related work and research gap
 │   ├── ROUTER_DESIGN.md      # how each component and router works
 │   ├── DEVELOPMENT_LOG.md    # how the project was built, step by step
@@ -340,6 +389,7 @@ pytest -q
 
 - 📚 [Literature survey](docs/LITERATURE_SURVEY.md): routing, cascades, LLM-as-judge, retrieval, code-mixed NLP, and the gap this project addresses
 - 🧭 [Router design](docs/ROUTER_DESIGN.md): every component, feature and metric explained
+- 🖥️ [Live web console](docs/index.html): streaming demonstration of routing and savings
 - 📝 [Development log](docs/DEVELOPMENT_LOG.md): how each part was built and tested, and the decisions made
 
 ## Ideas to extend
