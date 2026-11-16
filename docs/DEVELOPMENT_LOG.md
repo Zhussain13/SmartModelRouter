@@ -286,6 +286,25 @@ live, where each goes, and how much the router saves compared with no router.
 - New test `tests/test_web_export.py` runs the demo pipeline and the export in a temp copy and
   checks that the embedded JSON is valid and complete (13 tests in total).
 
+### 4.4 Animated architecture (`docs/architecture.html`)
+
+- **What:** a single diagram of the whole system. The online lane (question → embed → FAQ
+  check → router → small or large model → answer) sits above the offline lane (queries →
+  build_labels → judge → labels → train → router.joblib, plus evaluate and export). Every box is
+  labelled with the file that implements it.
+- **How:** an inline SVG with the wires as `<path>` elements. A packet carrying the example
+  question moves along them with `getPointAtLength()`, pauses at each component, and highlights
+  it. A caption bar inside the diagram and a step list beside it explain each step. The router box
+  has a live `p_hard` gauge with the threshold marked. Dots flow slowly through the offline lane
+  to show it feeding `router.joblib` into the router.
+- **Examples:** FAQ hit, easy → small, hard → large, and cascade escalation. Rule scores in the
+  narration were computed with the real `rule_score()` (0.0, 0.0, 0.7 and 0.3). Similarities and
+  `p_hard` values are marked on the page as typical examples.
+- **Post-ready media:** the page was recorded in headless Chromium (Playwright video) and cropped
+  with ffmpeg to `docs/images/architecture.mp4` (38 s, about 2 MB) and `architecture.gif` for the README.
+- **Checked:** light, dark and 400 px phone width (the diagram scrolls sideways inside its own
+  box), with no console errors. Three overlapping labels were moved after the first render.
+
 ---
 
 ## Phase 5: Real experiment run log (fill this in)

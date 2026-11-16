@@ -7,6 +7,9 @@ For setup and usage, see the [README](../README.md).
 
 ## 1. System overview
 
+An animated, interactive version of this overview is in [architecture.html](architecture.html)
+(also as [architecture.gif](images/architecture.gif) and [architecture.mp4](images/architecture.mp4)).
+
 ```mermaid
 flowchart LR
     subgraph Online["Online: answering a question (app.py)"]
