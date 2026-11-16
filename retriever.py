@@ -1,7 +1,6 @@
 """FAQ lookup using sentence embeddings and cosine similarity."""
 import numpy as np
 import pandas as pd
-from sentence_transformers import SentenceTransformer
 
 import config
 
@@ -9,10 +8,16 @@ _embedder = None
 
 
 def embed(texts):
+    """Turns a list of texts into unit-length vectors (384 numbers each)."""
+    texts = list(texts)
+    if config.DEMO:                      # no download needed in demo mode
+        import demo_models
+        return demo_models.embed(texts)
     global _embedder
     if _embedder is None:
+        from sentence_transformers import SentenceTransformer
         _embedder = SentenceTransformer(config.EMBED_MODEL)
-    return _embedder.encode(list(texts), normalize_embeddings=True)
+    return _embedder.encode(texts, normalize_embeddings=True)
 
 
 class FAQRetriever:

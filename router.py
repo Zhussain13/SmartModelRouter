@@ -1,8 +1,15 @@
-"""Decides how hard a question is. Each router outputs p_hard in [0, 1]."""
+"""Decides how hard a question is. Each router outputs p_hard in [0, 1].
+
+p_hard >= threshold  -> send to the large model, otherwise the small model.
+(The cascade router needs no code here: it uses the small model's own confidence,
+see models.ask_small_with_confidence and evaluate.py.)
+"""
 import re
 
 import joblib
 import numpy as np
+
+import config
 
 HARD_WORDS = ["why", "debug", "error", "segfault", "crash", "prove", "derive",
               "compare", "design", "optimi", "complexity", "step by step",
@@ -49,8 +56,8 @@ class RuleRouter:
 class LearnedRouter:
     name = "learned"
 
-    def __init__(self, path: str = "router.joblib"):
-        self.clf = joblib.load(path)
+    def __init__(self, path: str | None = None):
+        self.clf = joblib.load(path or config.ROUTER_PATH)
 
     def p_hard(self, q: str) -> float:
         return float(self.p_hard_many([q])[0])

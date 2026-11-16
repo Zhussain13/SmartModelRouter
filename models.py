@@ -1,6 +1,8 @@
-"""Talks to the small model (Ollama) and the large model (Gemini).
+"""Talks to the models. Every call records tokens, cost and time.
 
-Every call records tokens, cost and time so strategies can be compared later.
+    small model : Ollama (local, free)
+    large model : Gemini free tier  OR  a bigger Ollama model  (config.LARGE_PROVIDER)
+    demo mode   : built-in simulator, no models needed (config.DEMO)
 """
 import re
 import time
@@ -24,13 +26,19 @@ class Result:
     latency_s: float
 
 
-# ---------------- Small model (Ollama, runs locally) ----------------
-def ask_small(prompt: str, system: str = SYSTEM) -> Result:
+def _cost(tin, tout, large: bool) -> float:
+    if large:
+        return (tin * config.LARGE_PRICE_IN + tout * config.LARGE_PRICE_OUT) / 1e6
+    return (tin * config.SMALL_PRICE_IN + tout * config.SMALL_PRICE_OUT) / 1e6
+
+
+# ---------------- Ollama (local) ----------------
+def _ollama(model: str, prompt: str, system: str, large: bool) -> Result:
     t0 = time.time()
     r = requests.post(
         f"{config.OLLAMA_URL}/api/chat",
         json={
-            "model": config.SMALL_MODEL,
+            "model": model,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": prompt},
@@ -38,22 +46,21 @@ def ask_small(prompt: str, system: str = SYSTEM) -> Result:
             "stream": False,
             "options": {"temperature": 0.2},
         },
-        timeout=300,
+        timeout=600,
     )
     r.raise_for_status()
     data = r.json()
     tin = data.get("prompt_eval_count", 0)
     tout = data.get("eval_count", 0)
-    cost = (tin * config.SMALL_PRICE_IN + tout * config.SMALL_PRICE_OUT) / 1e6
-    return Result(data["message"]["content"], config.SMALL_MODEL,
-                  tin, tout, cost, time.time() - t0)
+    return Result(data["message"]["content"], model, tin, tout,
+                  _cost(tin, tout, large), time.time() - t0)
 
 
-# ---------------- Large model (Gemini API, free tier) ----------------
+# ---------------- Gemini (free tier) ----------------
 _client = None
 
 
-def _gemini():
+def _gemini_client():
     global _client
     if _client is None:
         from google import genai
@@ -64,16 +71,15 @@ def _gemini():
 
 def _is_rate_limit(e: Exception) -> bool:
     msg = str(e)
-    return "429" in msg or "RESOURCE_EXHAUSTED" in msg or "503" in msg or "UNAVAILABLE" in msg
+    return any(s in msg for s in ("429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE"))
 
 
-def ask_large(prompt: str, system: str = SYSTEM, model: str | None = None) -> Result:
+def _gemini(model: str, prompt: str, system: str) -> Result:
     from google.genai import types
-    model = model or config.LARGE_MODEL
     t0 = time.time()
     for attempt in range(config.API_MAX_RETRIES + 1):
         try:
-            resp = _gemini().models.generate_content(
+            resp = _gemini_client().models.generate_content(
                 model=model,
                 contents=prompt,
                 config=types.GenerateContentConfig(system_instruction=system,
@@ -93,9 +99,32 @@ def ask_large(prompt: str, system: str = SYSTEM, model: str | None = None) -> Re
     # "Thinking" tokens are billed as output tokens.
     tout = ((getattr(u, "candidates_token_count", 0) or 0)
             + (getattr(u, "thoughts_token_count", 0) or 0)) if u else 0
-    cost = (tin * config.LARGE_PRICE_IN + tout * config.LARGE_PRICE_OUT) / 1e6
     time.sleep(config.API_SLEEP)
-    return Result(resp.text or "", model, tin, tout, cost, latency)
+    return Result(resp.text or "", model, tin, tout, _cost(tin, tout, True), latency)
+
+
+# ---------------- Demo simulator ----------------
+def _demo(prompt: str, which: str) -> Result:
+    import demo_models
+    text, tin, tout, lat = demo_models.answer(prompt, which)
+    model = config.SMALL_MODEL if which == "small" else config.LARGE_MODEL
+    return Result(text, model, tin, tout, _cost(tin, tout, which == "large"), lat)
+
+
+# ---------------- Public API ----------------
+def ask_small(prompt: str, system: str = SYSTEM) -> Result:
+    if config.DEMO:
+        return _demo(prompt, "small")
+    return _ollama(config.SMALL_MODEL, prompt, system, large=False)
+
+
+def ask_large(prompt: str, system: str = SYSTEM, model: str | None = None) -> Result:
+    if config.DEMO:
+        return _demo(prompt, "large")
+    model = model or config.LARGE_MODEL
+    if config.LARGE_PROVIDER == "ollama":
+        return _ollama(model, prompt, system, large=True)
+    return _gemini(model, prompt, system)
 
 
 # ---------------- Small model + self-reported confidence (for cascade) ----------------
@@ -104,12 +133,18 @@ CONF_SUFFIX = ("\n\nAfter your answer, write one final line exactly like "
                "your answer is fully correct).")
 
 
+def parse_confidence(text: str):
+    """Returns (answer_without_confidence_line, confidence 1-10; 5 if missing)."""
+    matches = re.findall(r"CONFIDENCE:\**\s*(\d+)", text)
+    conf = int(matches[-1]) if matches else 5
+    clean = re.sub(r"\s*\**CONFIDENCE:\**\s*\d+.*$", "", text, flags=re.S).strip()
+    return clean, max(1, min(conf, 10))
+
+
 def ask_small_with_confidence(prompt: str):
     res = ask_small(prompt + CONF_SUFFIX)
-    matches = re.findall(r"CONFIDENCE:\s*(\d+)", res.text)
-    conf = int(matches[-1]) if matches else 5
-    res.text = re.sub(r"\s*\**CONFIDENCE:\**\s*\d+.*$", "", res.text, flags=re.S).strip()
-    return res, max(1, min(conf, 10))
+    res.text, conf = parse_confidence(res.text)
+    return res, conf
 
 
 # ---------------- LLM-as-judge (grades answers) ----------------
@@ -129,7 +164,10 @@ Reply with only one word: YES or NO."""
 
 
 def judge(question: str, candidate: str, reference: str) -> bool:
+    if config.DEMO:
+        import demo_models
+        return demo_models.judge(question, candidate)
     res = ask_large(JUDGE_PROMPT.format(q=question, ref=reference, cand=candidate),
                     system="You are a strict but fair grader.",
                     model=config.JUDGE_MODEL)
-    return res.text.strip().upper().startswith("YES")
+    return res.text.strip().upper().lstrip("*").startswith("YES")
