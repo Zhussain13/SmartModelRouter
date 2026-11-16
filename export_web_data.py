@@ -24,7 +24,7 @@ from sklearn.model_selection import StratifiedKFold, cross_val_predict
 
 import config
 from retriever import FAQRetriever
-from router import features, rule_score
+from router import features, load_tuning, rule_score
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--labels", default=config.LABELS_PATH)
@@ -113,6 +113,7 @@ data = {
         "small_acc": round(float(df.small_ok.mean()), 4),
         "large_acc": round(float(df.large_ok.mean()), 4),
         "large_avg_cost": round(float(df.large_cost.mean()), 8),
+        "thresholds": {k: v for k, v in load_tuning().items() if k in ("learned", "rules", "cascade", "tuned", "target")},
     },
     "cols": ["q", "topic", "p_rule", "p_learned", "conf", "small_ok", "large_ok",
              "small_cost", "large_cost", "small_lat", "large_lat"],
