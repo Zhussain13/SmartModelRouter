@@ -1,10 +1,4 @@
-requests
-pandas
-numpy
-scikit-learn
-joblib
+# Full install: real models (Ollama + Gemini free tier) and real embeddings.
+-r requirements-demo.txt
 sentence-transformers
 google-genai
-streamlit
-matplotlib
-tqdm

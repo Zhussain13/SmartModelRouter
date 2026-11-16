@@ -7,6 +7,10 @@ For each question:
   4. save everything. needs_large = 1 means the small model got it wrong.
 
 Safe to stop and re-run: it resumes where it left off.
+
+    python build_labels.py --limit 5        # try a few questions first
+    python build_labels.py                  # all of data/queries.csv
+    python build_labels.py --demo           # simulated, takes a second
 """
 import argparse
 import os
@@ -14,12 +18,14 @@ import os
 import pandas as pd
 from tqdm import tqdm
 
+import config
 from models import ask_large, ask_small_with_confidence, judge
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--input", default="data/queries.csv")
-ap.add_argument("--output", default="data/labels.csv")
+ap.add_argument("--output", default=config.LABELS_PATH)
 ap.add_argument("--limit", type=int, default=None)
+ap.add_argument("--demo", action="store_true", help="use the built-in simulator")
 args = ap.parse_args()
 
 df = pd.read_csv(args.input)
@@ -33,7 +39,7 @@ if os.path.exists(args.output):
     old = pd.read_csv(args.output)
     rows = old.to_dict("records")
     done = set(old["query"])
-    print(f"Resuming: {len(done)} questions already labelled.")
+    print(f"Resuming: {len(done)} questions already labelled in {args.output}")
 
 
 def save():
@@ -42,7 +48,7 @@ def save():
 
 new = 0
 try:
-    for _, r in tqdm(df.iterrows(), total=len(df)):
+    for _, r in tqdm(df.iterrows(), total=len(df), disable=config.DEMO):
         q = str(r["query"])
         if q in done:
             continue
@@ -78,7 +84,7 @@ if not rows:
     raise SystemExit("No rows labelled. Run check_setup.py to find the problem.")
 
 out = pd.DataFrame(rows)
-print(f"\nSaved {len(out)} rows to {args.output}")
+print(f"Saved {len(out)} rows to {args.output}")
 print(f"Small model correct: {out.small_ok.mean():.1%} | "
       f"Large model correct: {out.large_ok.mean():.1%} | "
       f"Needs large: {out.needs_large.mean():.1%}")
