@@ -312,9 +312,14 @@ live, where each goes, and how much the router saves compared with no router.
 ### 5.1 Checks that led to tuning
 
 - **FAQ threshold:** every course question (327 English + 10 Kanglish) was run through the
-  retriever. None reached the demo threshold of 0.55 (the highest was 0.51, "What is the SDLC?"),
-  so there are no false FAQ answers and the threshold was kept. The real MiniLM threshold (0.75)
-  must be checked the same way on a real run.
+  retriever, and none reached the demo threshold of 0.55. But the localhost run showed "IA 2 exam
+  date?" missing the FAQ and going to the large model. In the demo embedder, filler words
+  ("what is the …") dominated similarity. That pushed real paraphrases down to 0.46 and unrelated
+  "What is …" questions up to 0.51.
+  - **Fix:** remove filler words for FAQ lookup only (router features unchanged, so router results
+    are unaffected), and retune the demo threshold to 0.47.
+  - **Result:** 14/14 FAQ phrasings match and 0/337 course questions falsely match (highest 0.45).
+  - The real MiniLM threshold (0.75) must be checked the same way on a real run.
 - **Router threshold:** with the fixed 0.50, the learned router kept only 92% of large-model
   accuracy, short of the 95% goal. The cheapest threshold that met the goal was about 0.25–0.40.
   A fixed default was the wrong design, so tuning was added.

@@ -50,9 +50,9 @@ SMALL_PRICE_OUT = 0.0
 
 # ---- Retrieval ----
 EMBED_MODEL = "all-MiniLM-L6-v2"
-# Cosine similarity needed to answer from the FAQ. The demo embedder is cruder,
-# so it uses a lower threshold.
-RETRIEVAL_THRESHOLD = float(os.getenv("RETRIEVAL_THRESHOLD", "0.55" if DEMO else "0.75"))
+# Cosine similarity needed to answer from the FAQ. The demo embedder is cruder, so it uses
+# a lower threshold, tuned so all FAQ phrasings match and no course question does.
+RETRIEVAL_THRESHOLD = float(os.getenv("RETRIEVAL_THRESHOLD", "0.47" if DEMO else "0.75"))
 
 # ---- Routing ----
 ROUTER_THRESHOLD = 0.5       # p(hard) >= this  -> large model (default before tuning)
