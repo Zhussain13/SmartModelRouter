@@ -1,0 +1,10 @@
+requests
+pandas
+numpy
+scikit-learn
+joblib
+sentence-transformers
+google-genai
+streamlit
+matplotlib
+tqdm
