@@ -60,6 +60,15 @@ ones ("Why does my linked-list code segfault?") really need the large model.
 
 ## How it works
 
+<p align="center">
+  <img src="docs/images/architecture.gif" width="95%" alt="Animated architecture: questions travel from input through the FAQ check and the router to the small or large model and out as answers; the offline lane builds the router">
+</p>
+
+**▶ Interactive version:** [`docs/architecture.html`](docs/architecture.html) lets you pick an
+example (FAQ, easy, hard, cascade), follow it step by step, and read how the router does the maths.
+A 38-second video is in [`docs/images/architecture.mp4`](docs/images/architecture.mp4) for slides
+and posts.
+
 ```mermaid
 flowchart TD
     Q[User question] --> R{"[1] FAQ lookup<br/>similar question already answered?"}
@@ -255,7 +264,8 @@ python evaluate.py --test outputs/real/labels_kanglish.csv --out outputs/real/re
 
 **Open it:** double-click `docs/index.html`, or put it online with GitHub Pages: open the repo's
 **Settings → Pages**, set *Source* to **Deploy from a branch**, choose **main** and **/docs**, and
-save. The console then appears at `https://zhussain13.github.io/SmartModelRouter/`.
+save. The console then appears at `https://zhussain13.github.io/SmartModelRouter/` and the
+architecture at `https://zhussain13.github.io/SmartModelRouter/architecture.html`.
 
 **Load your own results:** the page ships with the demo data. After a real run, export your
 labels into the page:
@@ -334,6 +344,7 @@ SmartModelRouter/
 │   └── queries_kanglish.csv  # Kannada/English code-mixed questions (multilingual test)
 ├── docs/
 │   ├── index.html            # live web console (single file, GitHub Pages ready)
+│   ├── architecture.html     # animated architecture: input → routing → output
 │   ├── LITERATURE_SURVEY.md  # related work and research gap
 │   ├── ROUTER_DESIGN.md      # how each component and router works
 │   ├── DEVELOPMENT_LOG.md    # how the project was built, step by step
@@ -390,6 +401,7 @@ pytest -q
 - 📚 [Literature survey](docs/LITERATURE_SURVEY.md): routing, cascades, LLM-as-judge, retrieval, code-mixed NLP, and the gap this project addresses
 - 🧭 [Router design](docs/ROUTER_DESIGN.md): every component, feature and metric explained
 - 🖥️ [Live web console](docs/index.html): streaming demonstration of routing and savings
+- 🗺️ [Animated architecture](docs/architecture.html): follow a question from input to output
 - 📝 [Development log](docs/DEVELOPMENT_LOG.md): how each part was built and tested, and the decisions made
 
 ## Ideas to extend

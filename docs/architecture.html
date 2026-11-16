@@ -1,0 +1,522 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Smart Model Router Architecture</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a blueprint of the system. One full-width diagram (online path on top, offline
+   path below) with live packets, then the step-by-step inspector beside the router maths. */
+:root {
+  --bg: #eceff3;
+  --panel: #ffffff;
+  --panel-2: #f5f7fa;
+  --ink: #15213a;
+  --muted: #5a6577;
+  --line: #c9d1dc;
+  --grid: #dfe5ed;
+  --faq: #b97a06;
+  --small: #0f8a70;
+  --large: #4b45c6;
+  --offline: #7a6a55;
+  --active: #4b45c6;
+  --save: #0d7f52;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131d; --panel: #121c29; --panel-2: #172333; --ink: #e5ebf3; --muted: #94a2b5;
+    --line: #2e3f58; --grid: #172334; --faq: #e9ab3c; --small: #36c4a4; --large: #918bff;
+    --offline: #c2ad8e; --active: #918bff; --save: #42d792; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131d; --panel: #121c29; --panel-2: #172333; --ink: #e5ebf3; --muted: #94a2b5;
+  --line: #2e3f58; --grid: #172334; --faq: #e9ab3c; --small: #36c4a4; --large: #918bff;
+  --offline: #c2ad8e; --active: #918bff; --save: #42d792; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.55; margin: 0; }
+.wrap {
+  max-width: 1320px; margin: 0 auto; display: grid; gap: 16px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+}
+h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance; }
+.eyebrow { font-family: var(--mono); font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 12px 24px; }
+.top h1 { font-size: clamp(28px, 4vw, 40px); font-weight: 700; line-height: 1.05; letter-spacing: -.01em; }
+.top p { margin: 6px 0 0; color: var(--muted); max-width: 66ch; }
+
+.bar { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel-2); flex-wrap: wrap; }
+.seg button { font: 500 13.5px var(--body); color: var(--muted); background: transparent; border: 0; border-right: 1px solid var(--line); padding: 7px 12px; cursor: pointer; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.btn { font: 600 14px var(--body); border-radius: 8px; padding: 7px 14px; cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+button:focus-visible { outline: 2px solid var(--active); outline-offset: 2px; }
+.lbl { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+.diagram { padding: 8px; }
+.scroll { overflow-x: auto; }
+svg#arch { display: block; width: 100%; min-width: 880px; height: auto; }
+
+/* SVG styling through tokens */
+.gridline { stroke: var(--grid); stroke-width: 1; }
+.lane-label { font-family: var(--mono); font-size: 13px; letter-spacing: .14em; fill: var(--muted); }
+.lane-sub { font-family: var(--body); font-size: 13px; fill: var(--muted); }
+.lane-box { fill: none; stroke: var(--line); stroke-dasharray: 2 5; }
+.node rect.box { fill: var(--panel); stroke: var(--line); stroke-width: 1.5; transition: stroke .2s, filter .2s; }
+.node.active rect.box { stroke: var(--active); stroke-width: 2.5; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--active) 45%, transparent)); }
+.node .t { font-family: var(--display); font-weight: 600; font-size: 17px; fill: var(--ink); }
+.node .s { font-family: var(--mono); font-size: 11.5px; fill: var(--muted); }
+.node .file { font-family: var(--mono); font-size: 11px; fill: var(--muted); }
+.node.faq rect.stripe { fill: var(--faq); } .node.small rect.stripe { fill: var(--small); }
+.node.large rect.stripe { fill: var(--large); } .node.core rect.stripe { fill: var(--ink); }
+.node.off rect.stripe { fill: var(--offline); }
+.node.off rect.box { fill: var(--panel-2); }
+.wire { fill: none; stroke: var(--line); stroke-width: 2; }
+.wire.faq { stroke: color-mix(in srgb, var(--faq) 55%, var(--line)); }
+.wire.small { stroke: color-mix(in srgb, var(--small) 55%, var(--line)); }
+.wire.large { stroke: color-mix(in srgb, var(--large) 55%, var(--line)); }
+.wire.esc { stroke-dasharray: 5 5; }
+.wire.off { stroke: color-mix(in srgb, var(--offline) 45%, var(--line)); }
+.wire.load { stroke-dasharray: 2 6; stroke: var(--offline); stroke-linecap: round; }
+.wire-label { font-family: var(--mono); font-size: 11.5px; fill: var(--muted); }
+.wire-label.faq { fill: var(--faq); } .wire-label.small { fill: var(--small); } .wire-label.large { fill: var(--large); }
+.wire-label.off { fill: var(--offline); }
+.gauge-bg { fill: var(--panel-2); stroke: var(--line); }
+.gauge-fill { fill: var(--small); transition: width .6s ease, fill .3s; }
+.gauge-tick { stroke: var(--ink); stroke-width: 2; }
+.gauge-txt { font-family: var(--mono); font-size: 11.5px; fill: var(--ink); }
+.pkt-tag rect { fill: var(--ink); }
+.pkt-tag text { font-family: var(--mono); font-size: 12px; fill: var(--panel); }
+.off-dot { fill: var(--offline); }
+.cap-bg { fill: var(--panel-2); stroke: var(--line); }
+.cap-step { font-family: var(--mono); font-size: 13px; font-weight: 600; fill: var(--active); letter-spacing: .06em; }
+.cap-txt { font-family: var(--body); font-size: 15px; fill: var(--ink); }
+
+.below { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; }
+.insp-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; margin-bottom: 8px; }
+.insp-head h2 { font-size: 20px; }
+.qline { font-family: var(--mono); font-size: 14px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin: 4px 0 12px; overflow-wrap: anywhere; }
+ol.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; counter-reset: s; }
+ol.steps li { counter-increment: s; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; padding: 8px 10px; border-radius: 8px; border: 1px solid transparent; color: var(--muted); }
+ol.steps li::before { content: counter(s); font-family: var(--mono); font-size: 12px; font-weight: 600; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--line); color: var(--muted); }
+ol.steps li b { color: var(--ink); font-weight: 600; }
+ol.steps li code { font-family: var(--mono); font-size: 12.5px; }
+ol.steps li.done::before { content: "✓"; border-color: var(--save); color: var(--save); }
+ol.steps li.now { background: var(--panel-2); border-color: var(--active); color: var(--ink); }
+ol.steps li.now::before { background: var(--active); border-color: var(--active); color: var(--panel); }
+.result { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; min-height: 30px; }
+.pill { font-family: var(--mono); font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); }
+.pill.f { border-color: var(--faq); color: var(--faq); } .pill.s { border-color: var(--small); color: var(--small); } .pill.l { border-color: var(--large); color: var(--large); }
+
+.math h2 { font-size: 20px; margin-bottom: 10px; }
+.math h3 { font-size: 15px; font-family: var(--mono); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 16px 0 6px; }
+.math p { margin: 6px 0; max-width: 65ch; }
+.formula { font-family: var(--mono); font-size: 14px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow-x: auto; white-space: pre; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+td, th { padding: 6px 6px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+th { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+td.n { font-family: var(--mono); text-align: right; white-space: nowrap; }
+.note { font-size: 12.5px; color: var(--muted); }
+footer { color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 14px; }
+@media (max-width: 960px) { .below { grid-template-columns: minmax(0, 1fr); } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">Smart Model Router · system architecture</div>
+      <h1>From question to answer: how the router decides</h1>
+      <p>The top lane runs for every question a student asks. The bottom lane runs once, before that, to build the router. Pick an example and follow the packet through the system.</p>
+    </div>
+  </header>
+
+  <div class="bar" aria-label="Animation controls">
+    <span class="lbl" id="lbl-ex">Example</span>
+    <div class="seg" role="group" aria-labelledby="lbl-ex" id="seg-ex"></div>
+    <span class="lbl" id="lbl-sp">Speed</span>
+    <div class="seg" role="group" aria-labelledby="lbl-sp" id="seg-sp">
+      <button type="button" data-v="0.6">Slow</button>
+      <button type="button" data-v="1">Normal</button>
+      <button type="button" data-v="2">Fast</button>
+    </div>
+    <button type="button" class="btn" id="play">Pause</button>
+  </div>
+
+  <div class="card diagram">
+    <div class="scroll">
+      <svg id="arch" viewBox="0 0 1480 820" role="img" aria-labelledby="arch-title">
+        <title id="arch-title">Architecture: question, embedding, FAQ check, router, small or large model, answer; offline labelling and training build the router</title>
+        <defs>
+          <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M20 0H0V20" class="gridline" fill="none"/></pattern>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker>
+        </defs>
+        <rect x="0" y="0" width="1480" height="820" fill="url(#grid)"/>
+
+        <!-- Lanes -->
+        <rect class="lane-box" x="14" y="14" width="1452" height="440" rx="14"/>
+        <text class="lane-label" x="34" y="42">ONLINE · EVERY QUESTION</text>
+        <text class="lane-sub" x="270" y="42">app.py (chat) and docs/index.html (console)</text>
+        <rect class="lane-box" x="14" y="490" width="1452" height="316" rx="14"/>
+        <text class="lane-label" x="34" y="518">OFFLINE · BUILDING THE ROUTER</text>
+        <text class="lane-sub" x="330" y="518">python run_pipeline.py (runs once, before the app)</text>
+
+        <!-- Wires: online -->
+        <path id="p1" class="wire" d="M190 245 H240" marker-end="url(#arrow)"/>
+        <path id="p2" class="wire" d="M390 245 H440" marker-end="url(#arrow)"/>
+        <path id="p3f" class="wire faq" d="M515 210 V140" marker-end="url(#arrow)"/>
+        <path id="p3f2" class="wire faq" d="M590 105 H1385 V210" marker-end="url(#arrow)"/>
+        <path id="p3r" class="wire" d="M590 245 H650" marker-end="url(#arrow)"/>
+        <path id="p4" class="wire" d="M840 245 H900" marker-end="url(#arrow)"/>
+        <path id="p5s" class="wire small" d="M1020 245 H1050 V190 H1080" marker-end="url(#arrow)"/>
+        <path id="p5l" class="wire large" d="M1020 245 H1050 V335 H1080" marker-end="url(#arrow)"/>
+        <path id="p6s" class="wire small" d="M1250 190 H1280 V245 H1310" marker-end="url(#arrow)"/>
+        <path id="p6l" class="wire large" d="M1250 335 H1280 V260 H1310" marker-end="url(#arrow)"/>
+        <path id="pesc" class="wire large esc" d="M1165 225 V300" marker-end="url(#arrow)"/>
+        <text class="wire-label faq" x="526" y="180">sim ≥ 0.75</text>
+        <text class="wire-label" x="596" y="268">no</text><text class="wire-label" x="596" y="282">match</text>
+        <text class="wire-label faq" x="880" y="96">stored answer · $0 · no model called</text>
+        <text class="wire-label small" x="1030" y="180">p &lt; t</text>
+        <text class="wire-label large" x="1030" y="360">p ≥ t</text>
+        <text class="wire-label large" x="1156" y="258" text-anchor="end">cascade:</text><text class="wire-label large" x="1156" y="272" text-anchor="end">conf &lt; 7</text>
+
+        <!-- Wires: offline -->
+        <path id="o1" class="wire off" d="M190 592 H240" marker-end="url(#arrow)"/>
+        <path id="o2" class="wire off" d="M410 592 H460" marker-end="url(#arrow)"/>
+        <path id="o3" class="wire off" d="M610 592 H660" marker-end="url(#arrow)"/>
+        <path id="o4" class="wire off" d="M810 592 H860" marker-end="url(#arrow)"/>
+        <path id="o5" class="wire off" d="M1020 592 H1070" marker-end="url(#arrow)"/>
+        <path id="o6" class="wire load" d="M1145 560 V474 H745 V300" marker-end="url(#arrow)"/>
+        <path id="o7" class="wire off" d="M705 624 V690" marker-end="url(#arrow)"/>
+        <path id="o8" class="wire off" d="M810 722 H860" marker-end="url(#arrow)"/>
+        <path id="o9" class="wire off" d="M770 624 V656 H1145 V690" marker-end="url(#arrow)"/>
+        <path id="o10" class="wire off" d="M1220 722 H1290" marker-end="url(#arrow)"/>
+        <text class="wire-label off" x="1155" y="530">router.joblib is loaded by router.py</text>
+
+        <!-- Nodes: online -->
+        <g class="node core" id="n-input" transform="translate(40 210)">
+          <text class="file" x="0" y="-8">app.py</text>
+          <rect class="box" width="150" height="70" rx="10"/><rect class="stripe" width="5" height="70" rx="2"/>
+          <text class="t" x="16" y="30">Question in</text><text class="s" x="16" y="52">student types it</text>
+        </g>
+        <g class="node core" id="n-embed" transform="translate(240 210)">
+          <text class="file" x="0" y="-8">retriever.py</text>
+          <rect class="box" width="150" height="70" rx="10"/><rect class="stripe" width="5" height="70" rx="2"/>
+          <text class="t" x="16" y="30">Embed</text><text class="s" x="16" y="52">MiniLM → 384 nums</text>
+        </g>
+        <g class="node faq" id="n-faqchk" transform="translate(440 210)">
+          <text class="file" x="84" y="-8">retriever.py</text>
+          <rect class="box" width="150" height="70" rx="10"/><rect class="stripe" width="5" height="70" rx="2"/>
+          <text class="t" x="16" y="30">FAQ match?</text><text class="s" x="16" y="52">cosine vs faq.csv</text>
+        </g>
+        <g class="node faq" id="n-faq" transform="translate(440 70)">
+          <text class="file" x="0" y="-8">data/faq.csv</text>
+          <rect class="box" width="150" height="70" rx="10"/><rect class="stripe" width="5" height="70" rx="2"/>
+          <text class="t" x="16" y="30">Stored answer</text><text class="s" x="16" y="52">retrieval · $0</text>
+        </g>
+        <g class="node core" id="n-router" transform="translate(650 190)">
+          <text class="file" x="0" y="-8">router.py</text>
+          <rect class="box" width="190" height="110" rx="10"/><rect class="stripe" width="5" height="110" rx="2"/>
+          <text class="t" x="16" y="28">Router</text><text class="s" x="16" y="48">features → LogReg</text>
+          <rect class="gauge-bg" x="16" y="62" width="158" height="14" rx="4"/>
+          <rect class="gauge-fill" id="gauge" x="16" y="62" width="0" height="14" rx="4"/>
+          <line class="gauge-tick" x1="95" x2="95" y1="58" y2="80"/>
+          <text class="gauge-txt" id="gauge-txt" x="16" y="98">p_hard = –</text>
+          <text class="gauge-txt" x="174" y="98" text-anchor="end">t = 0.50</text>
+        </g>
+        <g class="node core" id="n-decide" transform="translate(900 210)">
+          <rect class="box" width="120" height="70" rx="10"/><rect class="stripe" width="5" height="70" rx="2"/>
+          <text class="t" x="16" y="30">p ≥ t ?</text><text class="s" x="16" y="52">or confidence</text>
+        </g>
+        <g class="node small" id="n-small" transform="translate(1080 155)">
+          <text class="file" x="0" y="-8">models.py · Ollama</text>
+          <rect class="box" width="170" height="70" rx="10"/><rect class="stripe" width="5" height="70" rx="2"/>
+          <text class="t" x="16" y="30">Small model</text><text class="s" x="16" y="52">qwen2.5:3b · free</text>
+        </g>
+        <g class="node large" id="n-large" transform="translate(1080 300)">
+          <text class="file" x="0" y="88">models.py · Gemini / Ollama</text>
+          <rect class="box" width="170" height="70" rx="10"/><rect class="stripe" width="5" height="70" rx="2"/>
+          <text class="t" x="16" y="30">Large model</text><text class="s" x="16" y="52">Gemini free / 14B</text>
+        </g>
+        <g class="node core" id="n-out" transform="translate(1310 210)">
+          <text class="file" x="0" y="-8">app.py</text>
+          <rect class="box" width="150" height="70" rx="10"/><rect class="stripe" width="5" height="70" rx="2"/>
+          <text class="t" x="16" y="30">Answer out</text><text class="s" x="16" y="52">+ route, cost, time</text>
+        </g>
+
+        <!-- Nodes: offline -->
+        <g class="node off" transform="translate(40 560)"><rect class="box" width="150" height="64" rx="10"/><rect class="stripe" width="5" height="64" rx="2"/>
+          <text class="t" x="16" y="28">queries.csv</text><text class="s" x="16" y="48">327 questions</text></g>
+        <g class="node off" transform="translate(240 560)"><rect class="box" width="170" height="64" rx="10"/><rect class="stripe" width="5" height="64" rx="2"/>
+          <text class="t" x="16" y="28">build_labels.py</text><text class="s" x="16" y="48">both models answer</text></g>
+        <g class="node off" transform="translate(460 560)"><rect class="box" width="150" height="64" rx="10"/><rect class="stripe" width="5" height="64" rx="2"/>
+          <text class="t" x="16" y="28">LLM judge</text><text class="s" x="16" y="48">YES / NO each</text></g>
+        <g class="node off" transform="translate(660 560)"><rect class="box" width="150" height="64" rx="10"/><rect class="stripe" width="5" height="64" rx="2"/>
+          <text class="t" x="16" y="28">labels.csv</text><text class="s" x="16" y="48">needs_large 0/1</text></g>
+        <g class="node off" transform="translate(860 560)"><rect class="box" width="160" height="64" rx="10"/><rect class="stripe" width="5" height="64" rx="2"/>
+          <text class="t" x="16" y="28">train_router.py</text><text class="s" x="16" y="48">LogReg · 70/30</text></g>
+        <g class="node off" transform="translate(1070 560)"><rect class="box" width="150" height="64" rx="10"/><rect class="stripe" width="5" height="64" rx="2"/>
+          <text class="t" x="16" y="28">router.joblib</text><text class="s" x="16" y="48">trained weights</text></g>
+        <g class="node off" transform="translate(640 690)"><rect class="box" width="170" height="64" rx="10"/><rect class="stripe" width="5" height="64" rx="2"/>
+          <text class="t" x="16" y="28">evaluate.py</text><text class="s" x="16" y="48">replay strategies</text></g>
+        <g class="node off" transform="translate(860 690)"><rect class="box" width="160" height="64" rx="10"/><rect class="stripe" width="5" height="64" rx="2"/>
+          <text class="t" x="16" y="28">results.png</text><text class="s" x="16" y="48">cost vs accuracy</text></g>
+        <g class="node off" transform="translate(1070 690)"><rect class="box" width="150" height="64" rx="10"/><rect class="stripe" width="5" height="64" rx="2"/>
+          <text class="t" x="16" y="28">export_web_data</text><text class="s" x="16" y="48">5-fold scores</text></g>
+        <g class="node off" transform="translate(1290 690)"><rect class="box" width="160" height="64" rx="10"/><rect class="stripe" width="5" height="64" rx="2"/>
+          <text class="t" x="16" y="28">Live console</text><text class="s" x="16" y="48">docs/index.html</text></g>
+
+        <rect class="cap-bg" x="34" y="398" width="1412" height="40" rx="8"/>
+        <text class="cap-step" id="cap-step" x="50" y="424"></text>
+        <text class="cap-txt" id="cap-txt" x="160" y="424"></text>
+        <g id="off-dots"></g>
+        <g id="packet" style="display:none">
+          <circle r="8" id="pkt-dot"/>
+          <g class="pkt-tag" id="pkt-tag"><rect id="pkt-bg" rx="5" height="22"/><text id="pkt-txt" y="15"></text></g>
+        </g>
+      </svg>
+    </div>
+  </div>
+
+  <section class="below">
+    <div class="card" aria-live="polite">
+      <div class="insp-head"><h2 id="ex-title">Example</h2><span class="eyebrow" id="ex-mode"></span></div>
+      <div class="qline" id="ex-q"></div>
+      <ol class="steps" id="steps"></ol>
+      <div class="result" id="result"></div>
+    </div>
+
+    <div class="card math">
+      <h2>How the router decides</h2>
+      <h3>1 · Features for each question</h3>
+      <div class="formula">x = [ 384 MiniLM numbers,
+      rule_score(q),
+      min(words, 200) / 200 ]      → 386 numbers</div>
+      <h3>2 · Logistic regression</h3>
+      <div class="formula">p_hard = 1 / (1 + e^-(w · x + b))</div>
+      <p>The weights <code>w</code> and <code>b</code> were learned offline from <code>labels.csv</code>, where <code>needs_large = 1</code> means the small model's answer was judged wrong.</p>
+      <h3>3 · Threshold</h3>
+      <div class="formula">p_hard ≥ t  → large model
+p_hard &lt; t  → small model     (t = 0.50, slider in the app)</div>
+      <h3>Rule score (baseline router)</h3>
+      <table>
+        <thead><tr><th>Signal</th><th style="text-align:right">Adds</th></tr></thead>
+        <tbody>
+          <tr><td>More than 40 words</td><td class="n">+0.4</td></tr>
+          <tr><td>Code: <code>{ } ;</code> <code>#include</code> <code>printf(</code> …</td><td class="n">+0.4</td></tr>
+          <tr><td>Words like why, debug, crash, prove, derive, compare</td><td class="n">+0.3</td></tr>
+          <tr><td>Arithmetic such as <code>12 * 4</code></td><td class="n">+0.2</td></tr>
+        </tbody>
+      </table>
+      <h3>Cascade (alternative)</h3>
+      <p>Ask the small model first and have it rate its confidence from 1 to 10. Below 7, throw that answer away and ask the large model.</p>
+      <p class="note">Rule scores in the examples are computed exactly as <code>router.py</code> does. Similarities, p_hard values and costs are typical example values.</p>
+    </div>
+  </section>
+
+  <footer>Smart Model Router · open-source student project · files named on each box are in the repository.</footer>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = id => document.getElementById(id);
+  const svg = $("arch");
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // ---------- The four worked examples ----------
+  const EX = [
+    {
+      key: "faq", label: "FAQ", title: "Answered from the FAQ", mode: "retrieval", color: "--faq",
+      q: "When is IA-2?",
+      steps: [
+        { path: null, node: "n-input", t: "<b>Question in.</b> The app receives <code>When is IA-2?</code>" },
+        { path: "p1", node: "n-embed", t: "<b>Embed.</b> MiniLM turns it into 384 numbers that capture its meaning." },
+        { path: "p2", node: "n-faqchk", t: "<b>FAQ match?</b> Cosine similarity with every FAQ question. Best: <code>When is the IA-2 exam?</code> at about 0.9, which is ≥ 0.75." },
+        { path: "p3f", node: "n-faq", t: "<b>Stored answer.</b> The answer comes straight from <code>data/faq.csv</code>. No model is called." },
+        { path: "p3f2", node: "n-out", t: "<b>Answer out.</b> Shown with route <code>retrieval</code>, cost $0, about 0.05 s." },
+      ],
+      result: [["f", "route: retrieval"], ["", "cost: $0"], ["", "time: ~0.05 s"]],
+    },
+    {
+      key: "small", label: "Easy → small", title: "Easy question → small model", mode: "learned router", color: "--small", p: 0.18,
+      q: "What is a compiler?",
+      steps: [
+        { path: null, node: "n-input", t: "<b>Question in.</b> <code>What is a compiler?</code>" },
+        { path: "p1", node: "n-embed", t: "<b>Embed.</b> 384 numbers." },
+        { path: "p2", node: "n-faqchk", t: "<b>FAQ match?</b> The best FAQ similarity is low (about 0.3 &lt; 0.75), so the question goes to the router." },
+        { path: "p3r", node: "n-router", gauge: true, t: "<b>Router.</b> Features: embedding + rule score <code>0.0</code> (no code, no reasoning words) + length 4 words. Logistic regression gives <code>p_hard ≈ 0.18</code>." },
+        { path: "p4", node: "n-decide", t: "<b>Decide.</b> 0.18 &lt; t = 0.50, so the small model gets it." },
+        { path: "p5s", node: "n-small", t: "<b>Small model.</b> <code>qwen2.5:3b</code> on Ollama answers locally for free." },
+        { path: "p6s", node: "n-out", t: "<b>Answer out.</b> Route <code>small</code>, cost $0." },
+      ],
+      result: [["s", "route: small"], ["", "p_hard ≈ 0.18"], ["", "cost: $0"]],
+    },
+    {
+      key: "large", label: "Hard → large", title: "Hard question → large model", mode: "learned router", color: "--large", p: 0.81,
+      q: "Why does this crash? int *p; *p = 10;",
+      steps: [
+        { path: null, node: "n-input", t: "<b>Question in.</b> <code>Why does this crash? int *p; *p = 10;</code>" },
+        { path: "p1", node: "n-embed", t: "<b>Embed.</b> 384 numbers." },
+        { path: "p2", node: "n-faqchk", t: "<b>FAQ match?</b> No similar FAQ, so it goes to the router." },
+        { path: "p3r", node: "n-router", gauge: true, t: "<b>Router.</b> Rule score <code>0.7</code> (code <code>;</code> +0.4, \"why\"/\"crash\" +0.3). Together with the embedding, logistic regression gives <code>p_hard ≈ 0.81</code>." },
+        { path: "p4", node: "n-decide", t: "<b>Decide.</b> 0.81 ≥ t = 0.50, so the large model gets it." },
+        { path: "p5l", node: "n-large", t: "<b>Large model.</b> Gemini free tier (or local <code>qwen2.5:14b</code>) explains the uninitialised pointer." },
+        { path: "p6l", node: "n-out", t: "<b>Answer out.</b> Route <code>large</code>, API-equivalent cost about $0.0015." },
+      ],
+      result: [["l", "route: large"], ["", "p_hard ≈ 0.81"], ["", "cost ≈ $0.0015"]],
+    },
+    {
+      key: "cascade", label: "Cascade", title: "Cascade: small first, then escalate", mode: "cascade router", color: "--large",
+      q: "Derive the recurrence for the Tower of Hanoi and solve it.",
+      steps: [
+        { path: null, node: "n-input", t: "<b>Question in.</b> <code>Derive the recurrence for the Tower of Hanoi…</code>" },
+        { path: "p1", node: "n-embed", t: "<b>Embed.</b> 384 numbers." },
+        { path: "p2", node: "n-faqchk", t: "<b>FAQ match?</b> No similar FAQ." },
+        { path: "p3r", node: "n-router", t: "<b>Router (cascade mode).</b> No prediction up front. Every question goes to the small model first." },
+        { path: "p4", node: "n-decide", t: "<b>Decide.</b> Send to the small model and ask it for a confidence from 1 to 10." },
+        { path: "p5s", node: "n-small", t: "<b>Small model.</b> Answers, then writes <code>CONFIDENCE: 4</code>." },
+        { path: "pesc", node: "n-large", t: "<b>Escalate.</b> 4 &lt; 7, so the small answer is discarded and the large model answers." },
+        { path: "p6l", node: "n-out", t: "<b>Answer out.</b> Route <code>large</code> (escalated). It pays for both attempts and waits for both." },
+      ],
+      result: [["l", "route: large (escalated)"], ["", "confidence 4 < 7"], ["", "slower: two calls"]],
+    },
+  ];
+
+  // ---------- Controls ----------
+  let exIdx = 0, speed = 1, playing = true, auto = true;
+  for (const [i, ex] of EX.entries()) {
+    const b = document.createElement("button"); b.type = "button"; b.textContent = ex.label; b.dataset.i = i;
+    $("seg-ex").append(b);
+  }
+  const pressed = () => {
+    for (const b of $("seg-ex").children) b.setAttribute("aria-pressed", String(+b.dataset.i === exIdx));
+    for (const b of $("seg-sp").children) b.setAttribute("aria-pressed", String(+b.dataset.v === speed));
+    $("play").textContent = playing ? "Pause" : "Play";
+  };
+  $("seg-ex").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; startExample(+b.dataset.i); });
+  $("seg-sp").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; speed = +b.dataset.v; pressed(); });
+  $("play").addEventListener("click", () => { playing = !playing; pressed(); });
+
+  // ---------- Packet animation ----------
+  const pkt = $("packet"), dot = $("pkt-dot"), tagBg = $("pkt-bg"), tagTxt = $("pkt-txt"), tag = $("pkt-tag");
+  let cur = null; // {ex, step, phase:'move'|'dwell', t, len, path}
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+  function setActive(nodeId) {
+    for (const n of svg.querySelectorAll(".node.active")) n.classList.remove("active");
+    if (nodeId) $(nodeId).classList.add("active");
+  }
+  function placePacket(x, y) {
+    dot.setAttribute("cx", x); dot.setAttribute("cy", y);
+    const w = tagTxt.getComputedTextLength() + 16;
+    const tx = Math.min(Math.max(x - w / 2, 20), 1460 - w);
+    tagBg.setAttribute("width", w); tagBg.setAttribute("x", tx); tagBg.setAttribute("y", y - 40);
+    tagTxt.setAttribute("x", tx + 8); tagTxt.setAttribute("y", y - 24);
+  }
+  function nodeCenter(id) {
+    const r = $(id).querySelector("rect.box"), g = $(id).transform.baseVal.consolidate().matrix;
+    return [g.e + r.width.baseVal.value / 2, g.f + r.height.baseVal.value / 2];
+  }
+  function renderSteps(ex, k) {
+    $("ex-title").textContent = ex.title; $("ex-mode").textContent = ex.mode; $("ex-q").textContent = "› " + ex.q;
+    const ol = $("steps");
+    if (ol.dataset.ex !== ex.key) {
+      ol.dataset.ex = ex.key; ol.innerHTML = "";
+      for (const s of ex.steps) { const li = document.createElement("li"); const d = document.createElement("div"); d.innerHTML = s.t; li.append(d); ol.append(li); }
+    }
+    [...ol.children].forEach((li, i) => { li.className = i < k ? "done" : i === k ? "now" : ""; });
+    const tmp = document.createElement("div"); tmp.innerHTML = ex.steps[k].t;
+    $("cap-step").textContent = `STEP ${k + 1}/${ex.steps.length}`;
+    const txt = tmp.textContent; $("cap-txt").textContent = txt.length > 150 ? txt.slice(0, 149) + "…" : txt;
+    const res = $("result"); res.innerHTML = "";
+    if (k >= ex.steps.length - 1) for (const [c, t] of ex.result) { const s = document.createElement("span"); s.className = "pill " + c; s.textContent = t; res.append(s); }
+  }
+  function gauge(p) {
+    const g = $("gauge");
+    if (p == null) { g.setAttribute("width", 0); $("gauge-txt").textContent = "p_hard = –"; return; }
+    g.setAttribute("width", 158 * p);
+    g.style.fill = p >= 0.5 ? css("--large") : css("--small");
+    $("gauge-txt").textContent = `p_hard = ${p.toFixed(2)}`;
+  }
+  function startExample(i) {
+    exIdx = i; pressed();
+    const ex = EX[i];
+    dot.style.fill = css(ex.color);
+    tagTxt.textContent = ex.q.length > 34 ? ex.q.slice(0, 33) + "…" : ex.q;
+    pkt.style.display = "";
+    gauge(null);
+    const [x, y] = nodeCenter("n-input"); placePacket(x, y);
+    cur = { ex, step: 0, phase: "dwell", t: 0 };
+    setActive("n-input"); renderSteps(ex, 0);
+  }
+  const DWELL = 2.2, TRAVEL = 260; // seconds per step pause, svg units per second
+  function tick(dt) {
+    if (!cur || !playing) return;
+    const ex = cur.ex;
+    cur.t += dt * speed;
+    if (cur.phase === "dwell") {
+      const last = cur.step >= ex.steps.length - 1;
+      if (cur.t >= (last ? DWELL * 1.6 : DWELL)) {
+        if (last) { startExample(auto ? (exIdx + 1) % EX.length : exIdx); return; }
+        cur.step++; const s = ex.steps[cur.step];
+        cur.path = $(s.path); cur.len = cur.path.getTotalLength(); cur.phase = "move"; cur.t = 0;
+        setActive(null);
+      }
+    } else {
+      const d = Math.min(cur.len, cur.t * TRAVEL);
+      const pt = cur.path.getPointAtLength(d); placePacket(pt.x, pt.y);
+      if (d >= cur.len) {
+        const s = ex.steps[cur.step];
+        cur.phase = "dwell"; cur.t = 0; setActive(s.node); renderSteps(ex, cur.step);
+        if (s.gauge) gauge(ex.p);
+      }
+    }
+  }
+
+  // ---------- Offline lane: slow ambient flow ----------
+  const chains = [["o1", "o2", "o3", "o4", "o5", "o6"], ["o7", "o8"], ["o9", "o10"]];
+  const offG = $("off-dots"); const offs = [];
+  let spawnT = 0;
+  function tickOffline(dt) {
+    if (!playing || reduceMotion) return;
+    spawnT += dt * speed;
+    if (spawnT > 1.1) {
+      spawnT = 0;
+      const chain = chains[Math.floor(Math.random() * 10) < 6 ? 0 : Math.random() < 0.5 ? 1 : 2];
+      const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      c.setAttribute("r", 4); c.setAttribute("class", "off-dot"); offG.append(c);
+      offs.push({ c, chain, seg: 0, d: 0, len: $(chain[0]).getTotalLength() });
+    }
+    for (let i = offs.length - 1; i >= 0; i--) {
+      const o = offs[i]; o.d += dt * speed * 120;
+      if (o.d >= o.len) {
+        o.seg++; o.d = 0;
+        if (o.seg >= o.chain.length) { o.c.remove(); offs.splice(i, 1); continue; }
+        o.len = $(o.chain[o.seg]).getTotalLength();
+      }
+      const p = $(o.chain[o.seg]).getPointAtLength(o.d); o.c.setAttribute("cx", p.x); o.c.setAttribute("cy", p.y);
+    }
+  }
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.1, (now - last) / 1000); last = now;
+    tick(reduceMotion ? dt * 4 : dt); tickOffline(dt);
+    requestAnimationFrame(frame);
+  }
+  speed = 1; pressed();
+  // Let the page choose an example from the hash (#faq, #small, #large, #cascade).
+  const fromHash = EX.findIndex(e => "#" + e.key === location.hash);
+  startExample(fromHash >= 0 ? fromHash : 2);
+  requestAnimationFrame(frame);
+})();
+</script>
