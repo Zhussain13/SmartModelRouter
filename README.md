@@ -16,8 +16,13 @@ and the large model is either Google Gemini on its **free tier** or a **bigger l
 is also a **demo mode** that runs the whole project with no models, keys or downloads.
 
 <p align="center">
-  <img src="docs/images/demo_app.png" width="85%" alt="Chat app showing the retrieval, small and large routes">
+  <img src="docs/images/console.png" width="90%" alt="Live routing console streaming 1,000 questions through the router">
 </p>
+
+**▶ Live console:** [`docs/index.html`](docs/index.html) streams 500–1,500 questions through the
+router and shows live where each one goes, how accurate the answers are, and how much money is
+saved compared with sending everything to the large model. Open it in any browser; there's
+nothing to install. See [Live web console](#live-web-console) for how to put it online.
 
 ---
 
@@ -28,6 +33,7 @@ is also a **demo mode** that runs the whole project with no models, keys or down
 - [Quick start (demo mode, 2 minutes)](#quick-start-demo-mode-2-minutes)
 - [Full setup with real free models](#full-setup-with-real-free-models)
 - [Running the pipeline](#running-the-pipeline)
+- [Live web console](#live-web-console)
 - [Results](#results)
 - [Project structure](#project-structure)
 - [Configuration](#configuration)
@@ -41,7 +47,7 @@ is also a **demo mode** that runs the whole project with no models, keys or down
 
 | Option | Quality | Cost | Speed |
 |---|---|---|---|
-| **Large model** (Gemini, GPT, Claude, Qwen 14B) | Excellent | Paid APIs charge per token; local runs need a big machine | Slower |
+| **Large model** (Gemini, GPT, Llama 70B, Qwen 14B) | Excellent | Paid APIs charge per token; local runs need a big machine | Slower |
 | **Small local model** (Qwen 2.5 3B, Llama 3.2 3B) | Good on easy questions, weak on hard ones | Free, runs on a laptop | Fast |
 
 Most student questions are easy ("What is a pointer?"), and a free 3B model answers them just as
@@ -53,6 +59,15 @@ ones ("Why does my linked-list code segfault?") really need the large model.
 > model's while the cost stays as low as possible.
 
 ## How it works
+
+<p align="center">
+  <img src="docs/images/architecture.gif" width="95%" alt="Animated architecture: questions travel from input through the FAQ check and the router to the small or large model and out as answers; the offline lane builds the router">
+</p>
+
+**▶ Interactive version:** [`docs/architecture.html`](docs/architecture.html) lets you pick an
+example (FAQ, easy, hard, cascade), follow it step by step, and read how the router does the maths.
+A 38-second video is in [`docs/images/architecture.mp4`](docs/images/architecture.mp4) for slides
+and posts.
 
 ```mermaid
 flowchart TD
@@ -190,9 +205,13 @@ anything that fails.
 |---|---|---|
 | 0 | `python check_setup.py` | Confirms the models and embeddings work |
 | 1 | `python build_labels.py` | Both models answer every question in `data/queries.csv` and the judge grades them. Saves `outputs/real/labels.csv` |
-| 2 | `python train_router.py` | Trains the learned router. Saves `outputs/real/router.joblib` and the held-out test split |
+| 2 | `python train_router.py` | Trains the learned router and **tunes each router's threshold** (cheapest setting that keeps 95% of large-model accuracy, chosen on training questions only). Saves `router.joblib`, `tuning.json` and the held-out test split |
 | 3 | `python evaluate.py` | Compares all strategies on the test split (no model calls). Saves `results.csv` and `results.png` |
-| 4 | `streamlit run app.py` | The chat app, using the trained router (or the rule router if none is trained) |
+| 4 | `streamlit run app.py` | The chat app, using the trained router and its tuned threshold (or the rule router if none is trained) |
+
+<p align="center">
+  <img src="docs/images/demo_app.png" width="70%" alt="Streamlit chat app showing the retrieval, small and large routes">
+</p>
 
 Steps 1–3 in one command:
 
@@ -227,12 +246,50 @@ python evaluate.py --test outputs/real/labels_kanglish.csv --out outputs/real/re
 
 ---
 
+## Live web console
+
+`docs/index.html` is a single-file web page that demonstrates the whole project.
+
+- **Pick a load:** 500, 1,000 or 1,500 questions, plus the share of FAQ-type traffic.
+- **Pick a router:** learned, rules or cascade, and drag its threshold.
+- **Watch it run:** questions flow through a switchboard to the FAQ, small and large outlets.
+  Counters, the cost race chart (with router vs without router), accuracy bars and a live feed of
+  each routed question update as it goes.
+- **Read the outcome:** money saved (in % and $), the projected saving at 1,000,000 questions a
+  month, and a table comparing every strategy on exactly the same traffic.
+
+<p align="center">
+  <img src="docs/images/console.png" width="80%" alt="Live routing console">
+</p>
+
+**Open it:** double-click `docs/index.html`, or put it online with GitHub Pages: open the repo's
+**Settings → Pages**, set *Source* to **Deploy from a branch**, choose **main** and **/docs**, and
+save. The console then appears at `https://zhussain13.github.io/SmartModelRouter/` and the
+architecture at `https://zhussain13.github.io/SmartModelRouter/architecture.html`.
+
+**Load your own results:** the page ships with the demo data. After a real run, export your
+labels into the page:
+
+```bash
+python run_pipeline.py
+```
+
+```bash
+python export_web_data.py
+```
+
+The export scores every question with the learned router using 5-fold cross-validation, so no
+question is ever scored by a model that trained on it. The badge on the page switches from
+"Simulated data" to "Real run".
+
+---
+
 ## Results
 
 ### Demo run (simulated data)
 
 These numbers come from `python run_pipeline.py --demo`. **They are simulated** and only show what
-the output looks like. Replace them with your real run for any report.
+the output looks like. Real results come from a run with real models.
 
 <p align="center">
   <img src="docs/images/demo_results.png" width="75%" alt="Cost vs accuracy graph from the demo run">
@@ -247,6 +304,10 @@ the output looks like. Replace them with your real run for any report.
 | Learned @0.5 | 91.9% | $0.60 | 45% |
 | Cascade conf<7 | 97.0% | $0.56 | 41% |
 
+With **tuned thresholds** (chosen on training questions, scored on unseen ones), the learned router
+keeps 93.9% accuracy at 67% of the cost, and the cascade keeps 93.9% at 46%. They fall a little
+short of 95% on new questions, which is the normal gap between tuning data and test data.
+
 `evaluate.py` also prints the **headline**: the cheapest setting of each router that keeps 95%
 of the large model's accuracy. In the demo run, the cascade does that at **57% of the cost** and
 the learned router at **75%**.
@@ -257,7 +318,7 @@ gap between a router's curve and the oracle star is the room left for improvemen
 ### Your real results
 
 Run the full pipeline. `outputs/real/results.csv` and `outputs/real/results.png` are the table
-and graph for your report.
+and graph of the real experiment.
 
 > "Cost" is **API-equivalent**: what the same traffic would cost on a paid API (Gemini 2.5 Flash
 > list price by default). You pay nothing to run this project. The cost column lets the strategies
@@ -280,11 +341,14 @@ SmartModelRouter/
 ├── evaluate.py           # step 3: compare strategies, draw cost-vs-accuracy graph
 ├── run_pipeline.py       # steps 1-3 in one command
 ├── app.py                # step 4: Streamlit chat app
+├── export_web_data.py    # packs labelled results into the live web console
 ├── data/
 │   ├── faq.csv               # FAQ questions + answers (retrieval route)
 │   ├── queries.csv           # 327 English questions (C, DS, algorithms, DBMS, OS, CN, OOP, maths)
 │   └── queries_kanglish.csv  # Kannada/English code-mixed questions (multilingual test)
 ├── docs/
+│   ├── index.html            # live web console (single file, GitHub Pages ready)
+│   ├── architecture.html     # animated architecture: input → routing → output
 │   ├── LITERATURE_SURVEY.md  # related work and research gap
 │   ├── ROUTER_DESIGN.md      # how each component and router works
 │   ├── DEVELOPMENT_LOG.md    # how the project was built, step by step
@@ -310,6 +374,7 @@ All settings are in [`config.py`](config.py). Each one can be overridden with an
 | `JUDGE_MODEL` | same as the large model | Model used to grade answers |
 | `LARGE_PRICE_IN` / `LARGE_PRICE_OUT` | `0.30` / `2.50` | API-equivalent price, USD per 1M tokens (cost analysis only) |
 | `RETRIEVAL_THRESHOLD` | `0.75` | FAQ similarity needed to skip the models |
+| `ACCURACY_TARGET` | `0.95` | Share of large-model accuracy that threshold tuning must keep |
 | `API_SLEEP` | `6.0` | Seconds to pause after each Gemini call |
 | `OLLAMA_URL` | `http://localhost:11434` | Where Ollama is running |
 
@@ -340,6 +405,8 @@ pytest -q
 
 - 📚 [Literature survey](docs/LITERATURE_SURVEY.md): routing, cascades, LLM-as-judge, retrieval, code-mixed NLP, and the gap this project addresses
 - 🧭 [Router design](docs/ROUTER_DESIGN.md): every component, feature and metric explained
+- 🖥️ [Live web console](docs/index.html): streaming demonstration of routing and savings
+- 🗺️ [Animated architecture](docs/architecture.html): follow a question from input to output
 - 📝 [Development log](docs/DEVELOPMENT_LOG.md): how each part was built and tested, and the decisions made
 
 ## Ideas to extend
@@ -348,7 +415,7 @@ pytest -q
 2. **Better router model:** fine-tune DistilBERT instead of logistic regression.
 3. **Middle tier:** small → medium (e.g. `qwen2.5:7b`) → large.
 4. **Semantic cache:** reuse answers to questions that were already asked.
-5. **Real student questions:** collect them with a Google Form. This is what makes the dataset original.
+5. **Real student questions:** collect questions from students (for example with a Google Form) to replace the starter set.
 
 ## References
 

@@ -22,3 +22,22 @@ def test_rule_router_batch_matches_single():
     r = RuleRouter()
     qs = ["What is a stack?", "Prove that n^2 >= n", "Trace: for(i=0;i<3;i++);"]
     assert list(r.p_hard_many(qs)) == [r.p_hard(q) for q in qs]
+
+
+def test_cheapest_threshold_picks_cheapest_setting_that_meets_target():
+    from router import cheapest_threshold
+    # 4 questions: the small model fails the two "hard" ones (high scores).
+    scores = [0.1, 0.2, 0.7, 0.9]
+    small_ok, large_ok = [1, 1, 0, 0], [1, 1, 1, 1]
+    small_cost, large_cost = [0, 0, 0, 0], [1, 1, 1, 1]
+    t, acc, cost = cheapest_threshold(scores, small_ok, large_ok, small_cost, large_cost,
+                                      [0.0, 0.5, 0.8, 1.01], target=0.95)
+    assert (t, acc, cost) == (0.5, 1.0, 0.5)   # only the two hard ones go to large
+
+
+def test_cheapest_threshold_cascade_counts_both_calls():
+    from router import cheapest_threshold
+    conf = [9, 9, 3, 2]
+    t, acc, cost = cheapest_threshold(conf, [1, 1, 0, 0], [1, 1, 1, 1], [0.1] * 4, [1] * 4,
+                                      range(1, 12), target=0.95, cascade=True)
+    assert t == 4 and acc == 1.0 and abs(cost - (0.1 + 0.5)) < 1e-9

@@ -1,30 +1,30 @@
 # Development Log
 
 A step-by-step record of how Smart Model Router was built: what was done, how, why, and how
-each part was tested. The last section is a template for logging your own experiment runs.
+each part was tested. The last section is the log for real-model experiment runs.
 
 ---
 
-## Phase 0: Starting point
+## Phase 0: Plan
 
-**Input:** a project guide (`smart-model-router-guide.md`) describing the problem, the three-tier
-design, the tech stack, reference code for each file, and 16 sample questions.
+**Starting point:** a project plan describing the problem, the three-tier design (retrieval,
+small model, large model), the tech stack, a first version of each module, and 16 sample questions.
 
-**Requirements agreed before building:**
+**Design decisions made before building:**
 
 | Decision | Choice | Reason |
 |---|---|---|
 | Models | **Free only** | No paid APIs. Gemini is used on the free tier (no billing), and Ollama is local |
 | Large model | Support **both** Gemini free tier and a **local Ollama** model | Gemini needs no big machine; local needs no key or internet |
-| Fixes to the guide's code | Apply small correctness and speed fixes | Keep the guide's structure but fix issues found in review |
-| Dataset | Write about 300 starter questions | The guide says at least 300 are needed for meaningful results |
+| Fixes to the first version | Apply small correctness and speed fixes | Keep the planned structure but fix issues found in review |
+| Dataset | Write about 300 starter questions | At least 300 are needed for meaningful results |
 | Kanglish questions | Separate file | Keep training English-only and test code-mixed questions separately |
 | Literature survey | Written for the project | Covers routing, cascades, judges, retrieval and code-mixed NLP |
 | Demo mode | Add one | Lets anyone visiting the public repo run the project without installing models |
 
 ---
 
-## Phase 1: Core project from the guide
+## Phase 1: Core project
 
 ### 1.1 Configuration (`config.py`)
 
@@ -42,7 +42,7 @@ design, the tech stack, reference code for each file, and 16 sample questions.
     `usage_metadata`, and **thinking tokens are added to output tokens** because they are billed as output.
   - `ask_small_with_confidence()` appends a `CONFIDENCE: N` instruction and parses the result.
   - `judge()` asks the large model for YES/NO against a reference.
-- **Fixes over the guide:**
+- **Fixes over the plan:**
   - Gemini **rate-limit handling**: free-tier 429/503 errors are retried with growing waits
     (30 s, 60 s, …) instead of skipping the question. The default pause between calls was raised
     from 1 s to 6 s to stay under per-minute limits.
@@ -59,9 +59,9 @@ design, the tech stack, reference code for each file, and 16 sample questions.
 
 ### 1.4 Routers (`router.py`)
 
-- **How:** `rule_score()` exactly as in the guide. `features()` = 384-dim embedding + rule score
+- **How:** `rule_score()` as originally designed. `features()` = 384-dim embedding + rule score
   + normalised length. `LearnedRouter` loads the saved logistic-regression model.
-- **Fix:** added `p_hard_many()` for **batched** prediction. The guide embedded test questions one
+- **Fix:** added `p_hard_many()` for **batched** prediction. The first version embedded test questions one
   at a time, which is slow with a real embedding model; batching embeds them all in one call.
 
 ### 1.5 Labelling (`build_labels.py`)
@@ -69,7 +69,7 @@ design, the tech stack, reference code for each file, and 16 sample questions.
 - **How:** for each question, get the small answer and confidence, get the large answer, then judge
   both. Writes one row per question.
 - **Fixes:**
-  - The **checkpoint counter** counts only newly labelled rows. In the guide it counted all rows,
+  - The **checkpoint counter** counts only newly labelled rows. Originally it counted all rows,
     so after resuming, checkpoints happened at the wrong times.
   - **Saves on Ctrl+C** (a `try/finally` block), so a manual stop loses nothing.
   - Added a `has_reference` column so analysis can separate human-referenced labels.
@@ -88,7 +88,7 @@ design, the tech stack, reference code for each file, and 16 sample questions.
 - **How:** replays strategies on the saved test split with no model calls, as described in
   [ROUTER_DESIGN.md §5](ROUTER_DESIGN.md#5-evaluation-method).
 - **Fixes:**
-  - **Oracle definition.** The guide's oracle sent every question the small model got wrong to the
+  - **Oracle definition.** The first version's oracle sent every question the small model got wrong to the
     large model, even when the large model was also wrong. That costs money and gains no accuracy,
     so it isn't the "perfect router". It is now `small_ok == 0 AND large_ok == 1`.
   - Batched router predictions (see 1.4).
@@ -106,8 +106,8 @@ design, the tech stack, reference code for each file, and 16 sample questions.
 
 ### 1.9 Data
 
-- `data/faq.csv`: the 6 sample FAQs from the guide (to be replaced with real department FAQs).
-- `data/queries.csv`: the guide's 16 examples plus hand-written questions, for **327 English
+- `data/faq.csv`: 6 sample FAQs (to be replaced with real department FAQs).
+- `data/queries.csv`: the 16 sample questions plus hand-written questions, for **327 English
   questions** in total across C, data structures, algorithms, DBMS, OS, computer networks, OOP and
   maths. Easy ones are definitions ("What is a semaphore?"). Hard ones include code debugging,
   output tracing, proofs, numericals and design problems.
@@ -117,8 +117,8 @@ design, the tech stack, reference code for each file, and 16 sample questions.
 
 ### 1.10 Testing in Phase 1
 
-The development environment had no Ollama, no Gemini key, and **no access to Hugging Face** (so the
-embedding model could not be downloaded). Testing therefore used fakes:
+Phase 1 was tested without Ollama, a Gemini key or the Hugging Face download (the embedding
+model), so that the code could be checked on any machine. Testing used fakes:
 
 - a fake Ollama response and a fake Gemini client, including one forced **429 error** to test the
   retry,
@@ -234,7 +234,127 @@ only prove that the pipeline works end to end.
 
 ---
 
-## Phase 4: Real experiment run log (fill this in)
+## Phase 4: Live web console
+
+**Goal:** one page that demonstrates the whole project: questions streaming through the router
+live, where each goes, and how much the router saves compared with no router.
+
+### 4.1 Data export (`export_web_data.py`)
+
+- Reads `labels.csv` (demo or real) and scores every question with the **rule router** and the
+  **learned router**.
+- The learned-router scores use **5-fold cross-validation** (`cross_val_predict`): each question
+  is scored by a model trained on the other folds. Training once on everything and scoring the same
+  questions would overstate how good the router is.
+- Runs the real retriever over the FAQ questions plus 14 common phrasings ("IA 2 exam date?") and
+  keeps those that pass the retrieval threshold. That becomes the FAQ-type traffic.
+- Tags each question with a topic (C, DS & Algo, DBMS, OS, CN, OOP, Maths) using keywords, for the feed.
+- Writes compact JSON between two markers inside `docs/index.html`, so the page stays a **single
+  file** that works when double-clicked, on GitHub Pages, or as a shared link.
+
+### 4.2 The page (`docs/index.html`)
+
+- **Plain HTML, CSS and JavaScript, with no libraries.** Charts and the switchboard animation are
+  drawn on `<canvas>`.
+- **Traffic stream:** a seeded random generator builds N questions. Each one is FAQ-type with the
+  chosen probability; otherwise the next question comes from a shuffled pass over all labelled
+  questions, so repeats are spread evenly. The same settings always give the same stream.
+- **Routing in the browser** reuses the exact rules from `evaluate.py`: learned/rules `p ≥ t` → large;
+  cascade `confidence < c` → large, paying for the small attempt too; FAQ → $0.
+- **"Without router"** means every question, FAQ-type ones included, goes to the large model. FAQ
+  questions are priced at the average large-model cost.
+- **Live instruments:** saved % and $, with-router vs without-router cost meters, projection to
+  1,000,000 questions, accuracy (with router vs always large vs always small), route split, average
+  wait, a cumulative cost race chart, a live feed and a same-traffic comparison table.
+- **Controls:** 500 / 1,000 / 1,500 questions, router type, threshold, FAQ share, speed
+  (1×, 4×, 16×, Max), pause, and restart with a new random stream.
+- **Design:** a signal-routing console look (IBM Plex type, amber/teal/indigo route colours), with
+  light and dark themes, a phone layout, and support for reduced motion (numbers update without the
+  animation).
+
+### 4.3 Testing
+
+- Rendered in headless Chromium at desktop (light and dark) and at 400 px phone width: no console
+  errors and no horizontal overflow.
+- Functional run: 1,500 questions, cascade router, Max speed. It completed, and the comparison
+  table matched expectations (oracle cheapest at 100% accuracy, rules cheapest but least accurate).
+- **Fixes from that review:**
+  - The FAQ outlet count overlapped its label.
+  - The last x-axis label was clipped.
+  - The comparison table's "always large" row still sent FAQ traffic to retrieval. A separate
+    "No router · all → large" row was added, and "Saved" is now always measured against it.
+- New test `tests/test_web_export.py` runs the demo pipeline and the export in a temp copy and
+  checks that the embedded JSON is valid and complete (13 tests in total).
+
+### 4.4 Animated architecture (`docs/architecture.html`)
+
+- **What:** a single diagram of the whole system. The online lane (question → embed → FAQ
+  check → router → small or large model → answer) sits above the offline lane (queries →
+  build_labels → judge → labels → train → router.joblib, plus evaluate and export). Every box is
+  labelled with the file that implements it.
+- **How:** an inline SVG with the wires as `<path>` elements. A packet carrying the example
+  question moves along them with `getPointAtLength()`, pauses at each component, and highlights
+  it. A caption bar inside the diagram and a step list beside it explain each step. The router box
+  has a live `p_hard` gauge with the threshold marked. Dots flow slowly through the offline lane
+  to show it feeding `router.joblib` into the router.
+- **Examples:** FAQ hit, easy → small, hard → large, and cascade escalation. Rule scores in the
+  narration were computed with the real `rule_score()` (0.0, 0.0, 0.7 and 0.3). Similarities and
+  `p_hard` values are marked on the page as typical examples.
+- **Post-ready media:** the page was recorded in headless Chromium (Playwright video) and cropped
+  with ffmpeg to `docs/images/architecture.mp4` (38 s, about 2 MB) and `architecture.gif` for the README.
+- **Checked:** light, dark and 400 px phone width (the diagram scrolls sideways inside its own
+  box), with no console errors. Three overlapping labels were moved after the first render.
+
+---
+
+## Phase 5: Tuning and full localhost run
+
+### 5.1 Checks that led to tuning
+
+- **FAQ threshold:** every course question (327 English + 10 Kanglish) was run through the
+  retriever, and none reached the demo threshold of 0.55. But the localhost run showed "IA 2 exam
+  date?" missing the FAQ and going to the large model. In the demo embedder, filler words
+  ("what is the …") dominated similarity. That pushed real paraphrases down to 0.46 and unrelated
+  "What is …" questions up to 0.51.
+  - **Fix:** remove filler words for FAQ lookup only (router features unchanged, so router results
+    are unaffected), and retune the demo threshold to 0.47.
+  - **Result:** 14/14 FAQ phrasings match and 0/337 course questions falsely match (highest 0.45).
+  - The real MiniLM threshold (0.75) must be checked the same way on a real run.
+- **Router threshold:** with the fixed 0.50, the learned router kept only 92% of large-model
+  accuracy, short of the 95% goal. The cheapest threshold that met the goal was about 0.25–0.40.
+  A fixed default was the wrong design, so tuning was added.
+
+### 5.2 Threshold tuning
+
+- `router.cheapest_threshold()` sweeps thresholds and returns the cheapest one meeting
+  `ACCURACY_TARGET × always-large accuracy`, with cascade costs counting both calls.
+- `train_router.py` tunes on **training questions only** (learned-router scores by 5-fold
+  cross-validation) and writes `tuning.json`. If a router reaches the target only by sending
+  everything to the large model (the rule router in the demo), it keeps the default and says so.
+- `evaluate.py` adds "tuned" rows scored on the untouched test set. The app's slider and the live
+  console's thresholds start at the tuned values.
+- Demo result on unseen questions: learned @0.40 gives 93.9% accuracy at 67% of the cost, and
+  cascade conf<6 gives 93.9% at 46%. Both are slightly under 95%, the expected gap between tuning
+  and test data.
+- Two new unit tests cover the threshold search. The pipeline test now also checks
+  `tuning.json` (15 tests in total).
+
+### 5.3 Running everything on localhost
+
+The project was cloned fresh from GitHub into a clean folder, installed from
+`requirements-demo.txt`, run end to end in demo mode, and served locally:
+
+| Service | Command | Address |
+|---|---|---|
+| Chat app | `streamlit run app.py -- --demo` | http://localhost:8501 |
+| Live console + architecture | `python -m http.server 8000 --directory docs` | http://localhost:8000/ and /architecture.html |
+
+Each one was driven in headless Chromium over HTTP (not `file://`). The real-model run with
+Ollama and Gemini is the next step (Phase 6).
+
+---
+
+## Phase 6: Real experiment run log
 
 Copy this block for each real run so the report can cite exact settings.
 

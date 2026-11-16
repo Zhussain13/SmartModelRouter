@@ -16,6 +16,6 @@ def test_demo_pipeline_end_to_end(tmp_path):
     out = subprocess.run([sys.executable, "run_pipeline.py", "--demo"], cwd=tmp_path,
                          capture_output=True, text=True, timeout=600)
     assert out.returncode == 0, out.stdout + out.stderr
-    for f in ["labels.csv", "test_split.csv", "router.joblib", "results.csv", "results.png"]:
+    for f in ["labels.csv", "test_split.csv", "router.joblib", "tuning.json", "results.csv", "results.png"]:
         assert (tmp_path / "outputs" / "demo" / f).exists(), f
     assert "oracle (perfect router)" in out.stdout

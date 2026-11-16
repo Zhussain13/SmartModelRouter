@@ -50,13 +50,16 @@ SMALL_PRICE_OUT = 0.0
 
 # ---- Retrieval ----
 EMBED_MODEL = "all-MiniLM-L6-v2"
-# Cosine similarity needed to answer from the FAQ. The demo embedder is cruder,
-# so it uses a lower threshold.
-RETRIEVAL_THRESHOLD = float(os.getenv("RETRIEVAL_THRESHOLD", "0.55" if DEMO else "0.75"))
+# Cosine similarity needed to answer from the FAQ. The demo embedder is cruder, so it uses
+# a lower threshold, tuned so all FAQ phrasings match and no course question does.
+RETRIEVAL_THRESHOLD = float(os.getenv("RETRIEVAL_THRESHOLD", "0.47" if DEMO else "0.75"))
 
 # ---- Routing ----
-ROUTER_THRESHOLD = 0.5       # p(hard) >= this  -> large model
+ROUTER_THRESHOLD = 0.5       # p(hard) >= this  -> large model (default before tuning)
 CASCADE_MIN_CONF = 7         # small-model confidence below this -> escalate
+# Threshold tuning (train_router.py): pick the cheapest threshold that keeps this share
+# of the large model's accuracy. The tuned values are saved to TUNING_PATH.
+ACCURACY_TARGET = float(os.getenv("ACCURACY_TARGET", "0.95"))
 
 # ---- Gemini free-tier safety ----
 API_SLEEP = float(os.getenv("API_SLEEP", "6.0"))          # pause after each Gemini call
@@ -69,4 +72,5 @@ LABELS_PATH = os.path.join(OUT_DIR, "labels.csv")
 TEST_PATH = os.path.join(OUT_DIR, "test_split.csv")
 ROUTER_PATH = os.path.join(OUT_DIR, "router.joblib")
 RESULTS_PREFIX = os.path.join(OUT_DIR, "results")
+TUNING_PATH = os.path.join(OUT_DIR, "tuning.json")
 os.makedirs(OUT_DIR, exist_ok=True)

@@ -7,12 +7,12 @@ import config
 _embedder = None
 
 
-def embed(texts):
+def embed(texts, for_faq: bool = False):
     """Turns a list of texts into unit-length vectors (384 numbers each)."""
     texts = list(texts)
     if config.DEMO:                      # no download needed in demo mode
         import demo_models
-        return demo_models.embed(texts)
+        return demo_models.embed(texts, drop_stopwords=for_faq)
     global _embedder
     if _embedder is None:
         from sentence_transformers import SentenceTransformer
@@ -23,11 +23,11 @@ def embed(texts):
 class FAQRetriever:
     def __init__(self, path: str = "data/faq.csv"):
         self.df = pd.read_csv(path)
-        self.vecs = embed(self.df["question"].tolist())
+        self.vecs = embed(self.df["question"].tolist(), for_faq=True)
 
     def lookup(self, query: str):
         """Returns (similarity, answer, matched_question)."""
-        q = embed([query])[0]
+        q = embed([query], for_faq=True)[0]
         sims = self.vecs @ q            # cosine similarity (vectors are normalised)
         i = int(np.argmax(sims))
         return float(sims[i]), self.df.iloc[i]["answer"], self.df.iloc[i]["question"]
