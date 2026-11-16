@@ -142,6 +142,23 @@ just the question.
 **Weaknesses:** small models are often over-confident (see Kadavath et al., 2022 in the
 [literature survey](LITERATURE_SURVEY.md)), and escalated questions are slower.
 
+### 3.4 Threshold tuning
+
+A fixed threshold of 0.5 is arbitrary. `train_router.py` tunes one threshold per router:
+
+1. Score the **training** questions only. The learned router's scores come from 5-fold
+   cross-validation inside the training set, so no question is scored by a model that saw it.
+2. Try every threshold (0.00–1.00 in steps of 0.05, or confidence 1–11 for the cascade).
+3. Keep the **cheapest** threshold whose accuracy is at least `ACCURACY_TARGET` (95%) of the
+   always-large accuracy.
+4. If only "send everything to the large model" reaches the target (the rule router often
+   can't), keep the default instead, because that isn't routing.
+5. Save the results to `tuning.json`. `evaluate.py` reports the tuned settings on the untouched
+   test set, and the chat app and live console start from them.
+
+Because the thresholds are chosen on training data, the test accuracy usually lands a little below
+the target. That gap is reported honestly instead of tuning on the test set.
+
 ---
 
 ## 4. Producing labels: LLM-as-judge

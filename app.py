@@ -10,7 +10,7 @@ import streamlit as st
 import config
 from models import ask_large, ask_small
 from retriever import FAQRetriever
-from router import LearnedRouter, RuleRouter
+from router import LearnedRouter, RuleRouter, load_tuning
 
 st.set_page_config(page_title="Smart Model Router", page_icon="🔀")
 
@@ -31,8 +31,12 @@ if config.DEMO:
     st.info("**Demo mode**: answers are simulated, so you can see the routing without "
             "installing any model. See the README to run with real free models.")
 
-threshold = st.sidebar.slider("Router threshold (higher = cheaper)",
-                              0.0, 1.0, config.ROUTER_THRESHOLD, 0.05)
+tune = load_tuning()
+threshold = st.sidebar.slider("Router threshold (higher = cheaper)", 0.0, 1.0,
+                              float(tune[router.name]), 0.05)
+if tune["tuned"]:
+    st.sidebar.caption(f"Starts at the tuned value {tune[router.name]:.2f}, the cheapest that keeps "
+                       f"{tune.get('target', config.ACCURACY_TARGET):.0%} of large-model accuracy.")
 if "log" not in st.session_state:
     st.session_state.log = []
 

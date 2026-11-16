@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 
 import config
-from router import LearnedRouter, RuleRouter
+from router import LearnedRouter, RuleRouter, load_tuning
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--test", default=config.TEST_PATH, help="labelled questions to evaluate on")
@@ -61,6 +61,13 @@ rows = [
 for c in [5, 7, 9]:
     rows.append({"strategy": f"cascade conf<{c}",
                  **score(df.small_conf < c, cascade=True)})
+tune = load_tuning()
+if tune["tuned"]:   # thresholds chosen on the training questions, scored here on unseen ones
+    rows += [
+        {"strategy": f"rules tuned @{tune['rules']:.2f}", **score(p_rule >= tune["rules"])},
+        {"strategy": f"learned tuned @{tune['learned']:.2f}", **score(p_learned >= tune["learned"])},
+        {"strategy": f"cascade tuned conf<{tune['cascade']}", **score(df.small_conf < tune["cascade"], cascade=True)},
+    ]
 
 res = pd.DataFrame(rows)
 pd.set_option("display.width", 120)

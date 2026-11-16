@@ -307,7 +307,49 @@ live, where each goes, and how much the router saves compared with no router.
 
 ---
 
-## Phase 5: Real experiment run log (fill this in)
+## Phase 5: Tuning and full localhost run
+
+### 5.1 Checks that led to tuning
+
+- **FAQ threshold:** every course question (327 English + 10 Kanglish) was run through the
+  retriever. None reached the demo threshold of 0.55 (the highest was 0.51, "What is the SDLC?"),
+  so there are no false FAQ answers and the threshold was kept. The real MiniLM threshold (0.75)
+  must be checked the same way on a real run.
+- **Router threshold:** with the fixed 0.50, the learned router kept only 92% of large-model
+  accuracy, short of the 95% goal. The cheapest threshold that met the goal was about 0.25–0.40.
+  A fixed default was the wrong design, so tuning was added.
+
+### 5.2 Threshold tuning
+
+- `router.cheapest_threshold()` sweeps thresholds and returns the cheapest one meeting
+  `ACCURACY_TARGET × always-large accuracy`, with cascade costs counting both calls.
+- `train_router.py` tunes on **training questions only** (learned-router scores by 5-fold
+  cross-validation) and writes `tuning.json`. If a router reaches the target only by sending
+  everything to the large model (the rule router in the demo), it keeps the default and says so.
+- `evaluate.py` adds "tuned" rows scored on the untouched test set. The app's slider and the live
+  console's thresholds start at the tuned values.
+- Demo result on unseen questions: learned @0.40 gives 93.9% accuracy at 67% of the cost, and
+  cascade conf<6 gives 93.9% at 46%. Both are slightly under 95%, the expected gap between tuning
+  and test data.
+- Two new unit tests cover the threshold search. The pipeline test now also checks
+  `tuning.json` (15 tests in total).
+
+### 5.3 Running everything on localhost
+
+The project was cloned fresh from GitHub into a clean folder, installed from
+`requirements-demo.txt`, run end to end in demo mode, and served locally:
+
+| Service | Command | Address |
+|---|---|---|
+| Chat app | `streamlit run app.py -- --demo` | http://localhost:8501 |
+| Live console + architecture | `python -m http.server 8000 --directory docs` | http://localhost:8000/ and /architecture.html |
+
+Each one was driven in headless Chromium over HTTP (not `file://`). Real Ollama and Gemini could
+not be reached from the build machine, so the real-model run is the next step (Phase 6).
+
+---
+
+## Phase 6: Real experiment run log (fill this in)
 
 Copy this block for each real run so the report can cite exact settings.
 

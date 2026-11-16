@@ -205,9 +205,9 @@ anything that fails.
 |---|---|---|
 | 0 | `python check_setup.py` | Confirms the models and embeddings work |
 | 1 | `python build_labels.py` | Both models answer every question in `data/queries.csv` and the judge grades them. Saves `outputs/real/labels.csv` |
-| 2 | `python train_router.py` | Trains the learned router. Saves `outputs/real/router.joblib` and the held-out test split |
+| 2 | `python train_router.py` | Trains the learned router and **tunes each router's threshold** (cheapest setting that keeps 95% of large-model accuracy, chosen on training questions only). Saves `router.joblib`, `tuning.json` and the held-out test split |
 | 3 | `python evaluate.py` | Compares all strategies on the test split (no model calls). Saves `results.csv` and `results.png` |
-| 4 | `streamlit run app.py` | The chat app, using the trained router (or the rule router if none is trained) |
+| 4 | `streamlit run app.py` | The chat app, using the trained router and its tuned threshold (or the rule router if none is trained) |
 
 <p align="center">
   <img src="docs/images/demo_app.png" width="70%" alt="Streamlit chat app showing the retrieval, small and large routes">
@@ -304,6 +304,10 @@ the output looks like. Replace them with your real run for any report.
 | Learned @0.5 | 91.9% | $0.60 | 45% |
 | Cascade conf<7 | 97.0% | $0.56 | 41% |
 
+With **tuned thresholds** (chosen on training questions, scored on unseen ones), the learned router
+keeps 93.9% accuracy at 67% of the cost, and the cascade keeps 93.9% at 46%. They fall a little
+short of 95% on new questions, which is the normal gap between tuning data and test data.
+
 `evaluate.py` also prints the **headline**: the cheapest setting of each router that keeps 95%
 of the large model's accuracy. In the demo run, the cascade does that at **57% of the cost** and
 the learned router at **75%**.
@@ -370,6 +374,7 @@ All settings are in [`config.py`](config.py). Each one can be overridden with an
 | `JUDGE_MODEL` | same as the large model | Model used to grade answers |
 | `LARGE_PRICE_IN` / `LARGE_PRICE_OUT` | `0.30` / `2.50` | API-equivalent price, USD per 1M tokens (cost analysis only) |
 | `RETRIEVAL_THRESHOLD` | `0.75` | FAQ similarity needed to skip the models |
+| `ACCURACY_TARGET` | `0.95` | Share of large-model accuracy that threshold tuning must keep |
 | `API_SLEEP` | `6.0` | Seconds to pause after each Gemini call |
 | `OLLAMA_URL` | `http://localhost:11434` | Where Ollama is running |
 
