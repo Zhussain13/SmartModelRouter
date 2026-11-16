@@ -109,17 +109,20 @@ SmartModelRouter/
 ├── app.py               # step 4: the chat demo
 └── data/
     ├── faq.csv          # known questions + answers (for retrieval)
-    └── queries.csv      # 337 questions used to train/test the router
+    ├── queries.csv      # 327 English questions used to train/test the router
+    └── queries_kanglish.csv  # 10 Kannada/English code-mixed questions (extension)
 ```
 
 ### The dataset (`data/queries.csv`)
 
-337 starter questions across C, data structures, algorithms, DBMS, OS, computer networks,
-OOP and maths:
+327 English starter questions across C, data structures, algorithms, DBMS, OS, computer
+networks, OOP and maths:
 
-- ~166 **easy** definition-style questions ("What is a semaphore?")
-- ~145 **hard** questions: code debugging, output tracing, proofs, numericals, design
-- 10 **Kannada/English code-mixed (Kanglish)** questions for the multilingual extension
+- ~170 **easy** definition-style questions ("What is a semaphore?")
+- ~155 **hard** questions: code debugging, output tracing, proofs, numericals, design
+
+`data/queries_kanglish.csv` holds 10 **Kannada/English code-mixed (Kanglish)** questions,
+kept separate so the main router is trained on English only (see *Multilingual test* below).
 
 `reference_answer` is optional. When it is blank, the large model's answer is used as the
 reference. **Replace or extend these with real questions from your students** (e.g. via a
@@ -198,6 +201,23 @@ python build_labels.py --limit 5
 If it stops (internet drop, daily quota used up, Ctrl+C), just run it again. It saves
 progress and **resumes where it left off**.
 
+### Multilingual test (Kanglish)
+
+After steps 1–3, check how the English-trained router copes with Kanglish questions.
+Label them into a separate file:
+
+```bash
+python build_labels.py --input data/queries_kanglish.csv --output data/labels_kanglish.csv
+```
+
+Then evaluate on that file (this writes `results_kanglish.csv` and `results_kanglish.png`):
+
+```bash
+python evaluate.py --test data/labels_kanglish.csv --out results_kanglish
+```
+
+Add more Kanglish questions to `data/queries_kanglish.csv` for a meaningful result. 10 is only a start.
+
 ### Free-tier limits: what to expect
 
 Each question needs 2–3 Gemini calls (answer + judge). The free tier allows only a limited
@@ -205,7 +225,7 @@ number of requests per minute and per day (see https://ai.google.dev/gemini-api/
 So:
 
 - `API_SLEEP` defaults to 6 seconds between calls, and rate-limit errors (429) are retried automatically.
-- Labelling all 337 questions may take **more than one day** of free quota. Run it, let it hit
+- Labelling all 327 questions may take **more than one day** of free quota. Run it, let it hit
   the daily limit, and run it again the next day. It resumes.
 - To go faster, grade with a model that has a bigger free quota:
   `JUDGE_MODEL=gemini-2.5-flash-lite` (set it like `GEMINI_API_KEY` above).
@@ -267,8 +287,8 @@ best (high accuracy, low cost).
   answer its own answer is assumed correct. Adding reference answers reduces this bias.
 
 **Ideas to extend it:**
-1. **Multilingual routing:** add more Kannada and Kanglish questions (a few are already included).
-   Existing research routers are tested almost entirely on English.
+1. **Multilingual routing:** grow `data/queries_kanglish.csv` and compare the router on English vs
+   Kanglish (see *Multilingual test*). Existing research routers are tested almost entirely on English.
 2. **Better router model:** fine-tune DistilBERT instead of logistic regression.
 3. **Middle tier:** small → medium (e.g. `gemini-2.5-flash-lite`) → large.
 4. **Cache:** if the same question repeats, reuse the earlier answer.
