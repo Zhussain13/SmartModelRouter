@@ -144,8 +144,8 @@ Google Form). That is what makes the project original.
 ### Step B: set up the project
 
 ```bash
-git clone https://github.com/zhussain13/smartmodelrouter.git
-cd smartmodelrouter
+git clone https://github.com/Zhussain13/SmartModelRouter.git
+cd SmartModelRouter
 python -m venv venv
 ```
 
