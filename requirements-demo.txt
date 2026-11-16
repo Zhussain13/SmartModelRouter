@@ -1,0 +1,10 @@
+# Lightweight install: enough for demo mode (python run_pipeline.py --demo,
+# streamlit run app.py -- --demo). No PyTorch, no model downloads.
+requests
+pandas
+numpy
+scikit-learn
+joblib
+streamlit
+matplotlib
+tqdm
